@@ -8,8 +8,6 @@
  * Michael Wettstein
  * November 2022, Zürich
  * *****************************************************************************
- * https://github.com/chischte/bxt-rig
- * *****************************************************************************
  * TODO:
  * Variablen umbenennen
  * Alle Schalter und Taster debouncen
@@ -29,13 +27,14 @@
  */
 
 #include <Arduino.h>
-// #include <ArduinoSTL.h> //      https://github.com/mike-matera/ArduinoSTL
-#include <Controllino.h>    // PIO Controllino Library
-#include <Cylinder.h>       // https://github.com/chischte/cylinder-library
-#include <EEPROM_Counter.h> // https://github.com/chischte/eeprom-counter-library
-#include <Insomnia.h> //       https://github.com/chischte/insomnia-delay-library
-#include <SD.h>       //       PIO Adafruit SD library
-#include <Nextion.h>  //       PIO Nextion library
+// #include <ArduinoSTL.h> //    https://github.com/mike-matera/ArduinoSTL
+#include <Controllino.h>    //   PIO Controllino Library
+#include <Cylinder.h>       //   https://github.com/chischte/cylinder-library
+#include <EEPROM_Counter.h> //   https://github.com/chischte/eeprom-counter-library
+#include <Insomnia.h> //         https://github.com/chischte/insomnia-delay-library
+#include <Nextion.h>  //         PIO Nextion library
+#include <SD.h>       //         PIO Adafruit SD library
+
 
 //*****************************************************************************
 // PRE-SETUP SECTION / PIN LAYOUT
@@ -66,10 +65,6 @@ String cycle_name[] = {"AUFWECKEN",   "VORSCHIEBEN",   "SCHNEIDEN",
                        "FESTKLEMMEN", "STARTDRUCK",    "SPANNEN",
                        "SCHWEISSEN",  "ABKUELHEN",     "ENTSPANNEN",
                        "WIPPENHEBEL", "ZURUECKFAHREN", "PAUSE"};
-
-
-
-
 
 // KNOBS AND POTENTIOMETERS:
 #define start_button CONTROLLINO_A6
@@ -158,7 +153,6 @@ int numberOfEepromValues = endOfEepromEnum;
 int eepromMinAddress = 0;
 int eepromMaxAddress = 4095;
 EEPROM_Counter eepromCounter;
-
 
 //***************************************************************************
 // NEXTION DISPLAY
@@ -833,7 +827,6 @@ void lights() {
   //*****************************************************************************
 } // END OF LIGHTS
 
-
 void read_n_toggle() {
 
   // IN AUTO MODE, MACHINE RUNS FROM STEP TO STEP AUTOMATICALLY:
@@ -945,8 +938,7 @@ void read_n_toggle() {
 } // END OF READ_N_TOGGLE
 
 void setup() {
-  eepromCounter.setup(eepromMinAddress, eepromMaxAddress,
-                            numberOfEepromValues);
+  eepromCounter.setup(eepromMinAddress, eepromMaxAddress, numberOfEepromValues);
   Serial.begin(115200); // start serial connection
 
   nextion_setup();
@@ -1110,6 +1102,7 @@ void loop() {
                             1000; // Gerät kann abkühlen
           testZyklenZaehler = 0;
         }
+
         SwitchToNextStep();
         break;
       } // END switch (cycle_step)

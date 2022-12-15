@@ -7,3 +7,6 @@
 [submodule "lib/cylinder-library"]
 	path = lib/cylinder-library
 	url = https://github.com/chischte/cylinder-library
+[submodule "lib/debounce-library"]
+	path = lib/debounce-library
+	url = https://github.com/chischte/debounce-library

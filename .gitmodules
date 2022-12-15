@@ -1,0 +1,9 @@
+[submodule "lib/insomnia-delay-library"]
+	path = lib/insomnia-delay-library
+	url = https://github.com/chischte/insomnia-delay-library
+[submodule "lib/eeprom-counter-library"]
+	path = lib/eeprom-counter-library
+	url = https://github.com/chischte/eeprom-counter-library
+[submodule "lib/cylinder-library"]
+	path = lib/cylinder-library
+	url = https://github.com/chischte/cylinder-library

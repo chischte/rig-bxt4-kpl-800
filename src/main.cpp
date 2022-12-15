@@ -9,34 +9,32 @@
  * November 2022, Zürich
  * *****************************************************************************
  * TODO:
+ * State Controller implementieren / Loop Ablauf von Sealless Rig kopieren
+ * Cyclesteps zu Objekten umschreiben
  * Variablen umbenennen
  * Alle Schalter und Taster debouncen
  * Timer durch insomniatimer ersetzen
- * Globale Variablen minimieren
  * Kommentare und Anmerkungen an Style Guide anpassen und vereinheitlichen
  * Compiler Warnungen anschauen
- * Step/ Auto logik vereinfachen
  * Reset button soll auch Zylinder abstellen
  * Insomnia library timeout für main cycle verwenden
  * Restpausenzeit direkt von insomnia library abfragen.
  * Bug beheben auf Page 2 wird die bandvorschubdauer angezeigt oben rechts...
  * ...beim Wechsel von Seite 3 auf 2
- * IMPLEMENT NEW LOGIC FOR MAIN CYCLE:
- * run if: (autoMode && autoModeRunning) || (!autoMode && stepModeRunning)
  * *****************************************************************************
  */
 
 // #include <Arduino.h>
-#include <ArduinoSTL.h> //    https://github.com/mike-matera/ArduinoSTL
-#include <Controllino.h>    //   PIO Controllino Library
-#include <Cylinder.h>       //   https://github.com/chischte/cylinder-library
-#include <EEPROM_Counter.h> //   https://github.com/chischte/eeprom-counter-library
-#include <Insomnia.h> //         https://github.com/chischte/insomnia-delay-library
-#include <Nextion.h> //          PIO Nextion library
-#include <SD.h>      //          PIO Adafruit SD library
+#include <ArduinoSTL.h>     //       https://github.com/mike-matera/ArduinoSTL
+#include <Controllino.h>    //       PIO Controllino Library
+#include <Cylinder.h>       //       https://github.com/chischte/cylinder-library
+#include <EEPROM_Counter.h> //       https://github.com/chischte/eeprom-counter-library
+#include <Insomnia.h> //             https://github.com/chischte/insomnia-delay-library
+#include <Nextion.h> //              PIO Nextion library
+#include <SD.h>      //              PIO Adafruit SD library
 
-#include <cycle_step.h> //        blueprint of a cycle step
-#include <state_controller.h> //  keeps track of machine states
+#include <cycle_step.h>       //     blueprint of a cycle step
+#include <state_controller.h> //     keeps track of machine states
 
 //*****************************************************************************
 // PRE-SETUP SECTION / PIN LAYOUT

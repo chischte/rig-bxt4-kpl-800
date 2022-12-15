@@ -32,9 +32,8 @@
 #include <Cylinder.h>       //   https://github.com/chischte/cylinder-library
 #include <EEPROM_Counter.h> //   https://github.com/chischte/eeprom-counter-library
 #include <Insomnia.h> //         https://github.com/chischte/insomnia-delay-library
-#include <Nextion.h>  //         PIO Nextion library
-#include <SD.h>       //         PIO Adafruit SD library
-
+#include <Nextion.h> //          PIO Nextion library
+#include <SD.h>      //          PIO Adafruit SD library
 
 //*****************************************************************************
 // PRE-SETUP SECTION / PIN LAYOUT

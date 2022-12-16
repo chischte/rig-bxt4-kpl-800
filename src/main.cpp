@@ -25,9 +25,9 @@
  */
 
 // #include <Arduino.h>
-#include <ArduinoSTL.h>     //       https://github.com/mike-matera/ArduinoSTL
-#include <Controllino.h>    //       PIO Controllino Library
-#include <Cylinder.h>       //       https://github.com/chischte/cylinder-library
+#include <ArduinoSTL.h>  //       https://github.com/mike-matera/ArduinoSTL
+#include <Controllino.h> //       PIO Controllino Library
+#include <Cylinder.h>    //       https://github.com/chischte/cylinder-library
 #include <EEPROM_Counter.h> //       https://github.com/chischte/eeprom-counter-library
 #include <Insomnia.h> //             https://github.com/chischte/insomnia-delay-library
 #include <Nextion.h> //              PIO Nextion library
@@ -40,31 +40,33 @@
 // PRE-SETUP SECTION / PIN LAYOUT
 //*****************************************************************************
 
+State_controller state_controller;
+
 //*****************************************************************************
 // DEFINE NAMES AND SEQUENCE OF STEPS FOR THE MAIN CYCLE:
 //*****************************************************************************
-enum mainCycleSteps {
-  AUFWECKEN,
-  VORSCHIEBEN,
-  SCHNEIDEN,
-  FESTKLEMMEN,
-  STARTDRUCK,
-  SPANNEN,
-  SCHWEISSEN,
-  ABKUEHLEN,
-  ENTSPANNEN,
-  WIPPENHEBEL,
-  ZURUECKFAHREN,
-  PAUSE,
-  endOfMainCycleEnum
-};
+// enum mainCycleSteps {
+//   AUFWECKEN,
+//   VORSCHIEBEN,
+//   SCHNEIDEN,
+//   FESTKLEMMEN,
+//   STARTDRUCK,
+//   SPANNEN,
+//   SCHWEISSEN,
+//   ABKUEHLEN,
+//   ENTSPANNEN,
+//   WIPPENHEBEL,
+//   ZURUECKFAHREN,
+//   PAUSE,
+//   endOfMainCycleEnum
+// };
 
-int numberOfMainCycleSteps = endOfMainCycleEnum;
-// DEFINE NAMES TO DISPLAY ON THE TOUCH SCREEN:
-String cycle_name[] = {"AUFWECKEN",   "VORSCHIEBEN",   "SCHNEIDEN",
-                       "FESTKLEMMEN", "STARTDRUCK",    "SPANNEN",
-                       "SCHWEISSEN",  "ABKUELHEN",     "ENTSPANNEN",
-                       "WIPPENHEBEL", "ZURUECKFAHREN", "PAUSE"};
+// int numberOfMainCycleSteps = endOfMainCycleEnum;
+// // DEFINE NAMES TO DISPLAY ON THE TOUCH SCREEN:
+// String cycle_name[] = {"AUFWECKEN",   "VORSCHIEBEN",   "SCHNEIDEN",
+//                        "FESTKLEMMEN", "STARTDRUCK",    "SPANNEN",
+//                        "SCHWEISSEN",  "ABKUELHEN",     "ENTSPANNEN",
+//                        "WIPPENHEBEL", "ZURUECKFAHREN", "PAUSE"};
 
 // KNOBS AND POTENTIOMETERS:
 #define start_button CONTROLLINO_A6
@@ -91,6 +93,7 @@ Cylinder zyl_schweisstaste(CONTROLLINO_D4);
 Cylinder zyl_loescherblink(CONTROLLINO_D11);
 
 Insomnia errorBlinkTimer;
+Insomnia cycle_step_delay;
 
 //*****************************************************************************
 // DECLARATION OF VARIABLES / DATA TYPES
@@ -154,19 +157,27 @@ int eepromMinAddress = 0;
 int eepromMaxAddress = 4095;
 EEPROM_Counter eepromCounter;
 
-//***************************************************************************
-// NEXTION DISPLAY
-//***************************************************************************
-void send_to_nextion() {
-  Serial2.write(0xff);
-  Serial2.write(0xff);
-  Serial2.write(0xff);
+// DECLARE FUNCTIONS IF NEEDED FOR THE COMPILER: *******************************
+void reset_flag_of_current_step();
+String get_main_cycle_display_string();
+void display_text_in_field(String text, String textField);
+void send_to_nextion();
+
+// CREATE VECTOR CONTAINER FOR THE CYCLE STEPS OBJECTS *************************
+
+int Cycle_step::object_count = 0; // enable object counting
+std::vector<Cycle_step *> main_cycle_steps;
+
+// NON NEXTION FUNCTIONS *******************************************************
+
+void reset_flag_of_current_step() {
+  main_cycle_steps[state_controller.get_current_step()]->reset_flags();
 }
 
 //***************************************************************************
 // DECLARATION OF VARIABLES
 //***************************************************************************
-int CurrentPage;
+int nex_current_page;
 
 //***************************************************************************
 // NEXTION SWITCH STATES LIST
@@ -288,21 +299,24 @@ void nex_switch_play_pausePushCallback(void *ptr) {
   nex_state_machine_running = !nex_state_machine_running;
 }
 void nex_switch_modePushCallback(void *ptr) {
-  step_mode = !step_mode;
+  state_controller.toggle_step_auto_mode();
+  step_mode = state_controller.is_in_step_mode();
   Serial2.print("click bt1,1"); // CLICK BUTTON
   send_to_nextion();
 }
 void nex_but_stepbackPushCallback(void *ptr) {
-  if (cycle_step > 0) {
-    cycle_step--;
-    machine_running = false;
-  }
+  state_controller.set_machine_stop();
+  reset_flag_of_current_step();
+  state_controller.set_step_mode();
+  state_controller.switch_to_previous_step();
+  reset_flag_of_current_step();
 }
 void nex_but_stepnxtPushCallback(void *ptr) {
-  if (cycle_step < (numberOfMainCycleSteps - 1)) {
-    cycle_step++;
-    machine_running = false;
-  }
+  state_controller.set_machine_stop();
+  reset_flag_of_current_step();
+  state_controller.set_step_mode();
+  state_controller.switch_to_next_step();
+  reset_flag_of_current_step();
 }
 void nex_but_reset_cyclePushCallback(void *ptr) {
   cycle_step = 0;
@@ -427,10 +441,10 @@ void nexButton3RightPushCallback(void *ptr) {
 //*************************************************
 // TOUCH EVENT FUNCTIONS PAGE CHANGES
 //*************************************************
-void nex_page0PushCallback(void *ptr) { CurrentPage = 0; }
+void nex_page0PushCallback(void *ptr) { nex_current_page = 0; }
 
 void nex_page1PushCallback(void *ptr) {
-  CurrentPage = 1;
+  nex_current_page = 1;
 
   // REFRESH BUTTON STATES:
   nex_prev_cycle_step = 1;
@@ -449,7 +463,7 @@ void nex_page1PushCallback(void *ptr) {
 }
 
 void nex_page2PushCallback(void *ptr) {
-  CurrentPage = 2;
+  nex_current_page = 2;
   // REFRESH BUTTON STATES:
   nex_prev_startfuelldauer = 0;
   nex_prev_shorttime_counter = 0;
@@ -459,7 +473,7 @@ void nex_page2PushCallback(void *ptr) {
 }
 
 void nex_page3PushCallback(void *ptr) {
-  CurrentPage = 3;
+  nex_current_page = 3;
   // REFRESH BUTTON STATES:
   nexPrevCyclesInARow = 0;
   nexPrevLongCooldownTime = 0;
@@ -541,6 +555,103 @@ void nextion_setup()
 
 } // END OF NEXTION SETUP
 
+void update_main_cycle_name() {
+  if (nex_prev_cycle_step != state_controller.get_current_step()) {
+    String number = String(state_controller.get_current_step() + 1);
+    String name = get_main_cycle_display_string();
+    Serial.println(number + " " + name);
+    display_text_in_field(number + " " + name, "t0");
+    nex_prev_cycle_step = state_controller.get_current_step();
+  }
+}
+
+void update_cycle_name() {
+  if (state_controller.is_in_step_mode() ||
+      state_controller.is_in_auto_mode()) {
+    update_main_cycle_name();
+  }
+}
+
+String get_main_cycle_display_string() {
+  int current_step = state_controller.get_current_step();
+  String display_text_cycle_name =
+      main_cycle_steps[current_step]->get_display_text();
+  return display_text_cycle_name;
+}
+// NEXTION GENERAL DISPLAY FUNCTIONS *******************************************
+
+void send_to_nextion() {
+  Serial2.write(0xff);
+  Serial2.write(0xff);
+  Serial2.write(0xff);
+}
+
+// void update_display_counter() {
+//   long new_value = counter.get_value(longtime_counter);
+//   Serial2.print("t0.txt=");
+//   Serial2.print("\"");
+//   Serial2.print(new_value);
+//   Serial2.print("\"");
+//   send_to_nextion();
+// }
+
+void show_info_field() {
+  if (nex_current_page == 1) {
+    Serial2.print("vis t4,1");
+    send_to_nextion();
+  }
+}
+
+void display_text_in_info_field(String text) {
+  Serial2.print("t4");
+  Serial2.print(".txt=");
+  Serial2.print("\"");
+  Serial2.print(text);
+  Serial2.print("\"");
+  send_to_nextion();
+}
+
+void hide_info_field() {
+  if (nex_current_page == 1) {
+    Serial2.print("vis t4,0");
+    send_to_nextion();
+  }
+}
+
+void clear_text_field(String textField) {
+  Serial2.print(textField);
+  Serial2.print(".txt=");
+  Serial2.print("\"");
+  Serial2.print(""); // erase text
+  Serial2.print("\"");
+  send_to_nextion();
+}
+
+void display_value_in_field(int value, String valueField) {
+  Serial2.print(valueField);
+  Serial2.print(".val=");
+  Serial2.print(value);
+  send_to_nextion();
+}
+
+void display_text_in_field(String text, String textField) {
+  Serial2.print(textField);
+  Serial2.print(".txt=");
+  Serial2.print("\"");
+  Serial2.print(text);
+  Serial2.print("\"");
+  send_to_nextion();
+}
+
+void toggle_ds_switch(String button) {
+  Serial2.print("click " + button + ",1");
+  send_to_nextion();
+}
+
+void set_momentary_button_high_or_low(String button, bool state) {
+  Serial2.print("click " + button + "," + state);
+  send_to_nextion();
+}
 //***************************************************************************
 void nextion_loop()
 //***************************************************************************
@@ -548,7 +659,7 @@ void nextion_loop()
 
   nexLoop(nex_listen_list); // check for any touch event
   //***************************************************************************
-  if (CurrentPage == 1) // START PAGE 1
+  if (nex_current_page == 1) // START PAGE 1
   {
     //*******************
     // PAGE 1 - LEFT SIDE:
@@ -609,16 +720,17 @@ void nextion_loop()
     //*******************
     // UPDATE CYCLE NAME
 
-    if (nex_prev_cycle_step != cycle_step) {
-      Serial2.print("t0.txt=");
-      Serial2.print("\"");
-      Serial2.print(cycle_step + 1); // write the number of the step
-      Serial2.print(" ");
-      Serial2.print(cycle_name[cycle_step]); // write the name of the step
-      Serial2.print("\"");
-      send_to_nextion();
-      nex_prev_cycle_step = cycle_step;
-    }
+    update_cycle_name();
+    // if (nex_prev_cycle_step != cycle_step) {
+    //   Serial2.print("t0.txt=");
+    //   Serial2.print("\"");
+    //   Serial2.print(cycle_step + 1); // write the number of the step
+    //   Serial2.print(" ");
+    //   Serial2.print(cycle_name[cycle_step]); // write the name of the step
+    //   Serial2.print("\"");
+    //   send_to_nextion();
+    //   nex_prev_cycle_step = cycle_step;
+    // }
     // UPDATE SWITCHBUTTON (dual state):
     if (zyl_feder_zuluft.get_state() != nex_state_zyl_feder_zuluft) {
       Serial2.print("click bt5,1"); // CLICK BUTTON
@@ -680,7 +792,7 @@ void nextion_loop()
   //*******************
   // PAGE 2 - LEFT SIDE
   //*******************
-  if (CurrentPage == 2) // START PAGE 2
+  if (nex_current_page == 2) // START PAGE 2
   {
     if (nex_prev_startfuelldauer != eepromCounter.get_value(startfuelldauer)) {
       send_to_nextion();
@@ -750,7 +862,7 @@ void nextion_loop()
   //*******************
   // PAGE 3
   //*******************
-  if (CurrentPage == 3) { // START PAGE 3
+  if (nex_current_page == 3) { // START PAGE 3
     if (nexPrevCyclesInARow != eepromCounter.get_value(cyclesInARow)) {
       send_to_nextion();
       Serial2.print("t4.txt=");
@@ -785,47 +897,6 @@ void nextion_loop()
   }
 
 } // END OF NEXTION LOOP
-
-void SwitchToNextStep() {
-  clearance_next_step = false;
-  cycle_step++;
-  if (cycle_step == numberOfMainCycleSteps) {
-    cycle_step = 0;
-  }
-}
-
-void lights() {
-  //*****************************************************************************
-  // GREEN LIGHT:
-
-  if (!step_mode) // IN AUTOMATIC MODE THE GREEN LIGHT IS ON PERMANENTLY
-  {
-    if (machine_running) {
-      digitalWrite((green_light), HIGH);
-    } else {
-      digitalWrite((green_light), LOW);
-    }
-  }
-
-  if (step_mode) // IN STEP MODE THE GREEN IS OFF BETWEEN STEPS
-    if (machine_running == true && clearance_next_step == true) {
-      digitalWrite((green_light), HIGH);
-    } else {
-      digitalWrite((green_light), LOW);
-    }
-
-  //*****************************************************************************
-  // RED LIGHT / ERROR BLINKER:
-
-  if (error_blink) {
-    if (errorBlinkTimer.delay_time_is_up(700)) {
-      digitalWrite((red_light), !(digitalRead(red_light)));
-    }
-  } else {
-    digitalWrite((red_light), LOW);
-  }
-  //*****************************************************************************
-} // END OF LIGHTS
 
 void read_n_toggle() {
 
@@ -937,98 +1008,205 @@ void read_n_toggle() {
 
 } // END OF READ_N_TOGGLE
 
-
-// CREATE VECTOR CONTAINER FOR THE CYCLE STEPS OBJECTS *************************
-
-int Cycle_step::object_count = 0; // enable object counting
-std::vector<Cycle_step *> main_cycle_steps;
-
-// void reset_flag_of_current_step() { main_cycle_steps[state_controller.get_current_step()]->reset_flags(); }
-
 // CREATE CYCLE STEP CLASSES ***************************************************
 // -----------------------------------------------------------------------------
-class Aufwecken : public Cycle_step{
-  String get_display_text(){return "AUFWECKEN";}
-  
+class Aufwecken_ : public Cycle_step {
+  String get_display_text() { return "AUFWECKEN"; }
+
   void do_initial_stuff(){};
-  void do_loop_stuff(){};
+  void do_loop_stuff() {
+    zyl_wippenhebel.stroke(1500, 1000);
+
+    if (zyl_wippenhebel.stroke_completed()) {
+      set_loop_completed();
+    }
+  };
 };
 // -----------------------------------------------------------------------------
-class Vorschieben : public Cycle_step{
-  String get_display_text(){return "VORSCHIEBEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
+class Vorschieben : public Cycle_step {
+  String get_display_text() { return "VORSCHIEBEN"; }
+  long feed_time;
+
+  void do_initial_stuff() {
+    feed_time = eepromCounter.get_value(strapEjectFeedTime) * 1000;
+  };
+  void do_loop_stuff() {
+    zyl_spanntaste.stroke(feed_time, 300);
+    if (zyl_spanntaste.stroke_completed()) {
+      set_loop_completed();
+    }
+  };
 };
 // -----------------------------------------------------------------------------
-class Schneiden : public Cycle_step{
-  String get_display_text(){return "SCHNEIDEN";}
-  
+class Schneiden : public Cycle_step {
+  String get_display_text() { return "SCHNEIDEN"; }
+
   void do_initial_stuff(){};
-  void do_loop_stuff(){};
+  void do_loop_stuff() {
+    zyl_messer.stroke(1500, 500);
+
+    if (zyl_messer.stroke_completed()) {
+      set_loop_completed();
+    }
+  };
 };
 // -----------------------------------------------------------------------------
-class Festklemmen : public Cycle_step{
-  String get_display_text(){return "FESTKLEMMEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
+class Festklemmen : public Cycle_step {
+  String get_display_text() { return "FESTKLEMMEN"; }
+
+  void do_initial_stuff() {
+    zyl_klemmblock.set(1);
+    cycle_step_delay.set_unstarted();
+  };
+  void do_loop_stuff() {
+    if (cycle_step_delay.delay_time_is_up(400)) {
+      set_loop_completed();
+    }
+  };
 };
 // -----------------------------------------------------------------------------
-class Startdruck : public Cycle_step{
-  String get_display_text(){return "STARTDRUCK";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
+class Startdruck : public Cycle_step {
+  String get_display_text() { return "STARTDRUCK"; }
+
+  void do_initial_stuff() {
+    startfuelltimer = millis();
+    startfuellung_running = true;
+    zyl_feder_zuluft.set(1); // 1=füllen 0=geschlossen
+    zyl_feder_abluft.set(1); // 1=geschlossen 0=entlüften
+  };
+
+  void do_loop_stuff() {
+    if ((millis() - startfuelltimer) >
+        eepromCounter.get_value(startfuelldauer)) {
+      zyl_feder_zuluft.set(0); // 1=füllen 0=geschlossen
+      startfuellung_running = false;
+      set_loop_completed();
+    };
+  };
 };
 // -----------------------------------------------------------------------------
-class Spannen : public Cycle_step{
-  String get_display_text(){return "SPANNEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
+class Spannen : public Cycle_step {
+  String get_display_text() { return "SPANNEN"; }
+
+  void do_initial_stuff() {
+    zyl_spanntaste.set(1); // Spanntaste betätigen
+    cycle_step_delay.set_unstarted();
+  };
+  void do_loop_stuff() {
+    if (endposition_erreicht) {
+      if (cycle_step_delay.delay_time_is_up(400)) {
+        set_loop_completed();
+      }
+    };
+  };
 };
 // -----------------------------------------------------------------------------
-class Schweissen : public Cycle_step{
-  String get_display_text(){return "SCHWEISSEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
+class Schweissen : public Cycle_step {
+  String get_display_text() { return "SCHWEISSEN"; }
+
+  void do_initial_stuff() {
+    zyl_spanntaste.set(0); // Spanntaste lösen
+  };
+
+  void do_loop_stuff() {
+    zyl_schweisstaste.stroke(1000, 2000); // Schweisstaste betätigen
+
+    if (zyl_schweisstaste.stroke_completed()) {
+      set_loop_completed();
+    }
+  };
 };
 // -----------------------------------------------------------------------------
-class Abkuehlen : public Cycle_step{
-  String get_display_text(){return "ABKUELHEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
+// Abkühlen und Druck abbauen
+class Abkuehlen : public Cycle_step {
+  String get_display_text() { return "ABKUELHEN"; }
+
+  void do_initial_stuff() {
+    cycle_step_delay.set_unstarted();
+    zyl_feder_zuluft.set(0); // 1=füllen 0=geschlossen
+    zyl_feder_abluft.set(0); // 1=geschlossen 0=entlüften
+  };
+  void do_loop_stuff() {
+    if (federdruck_float < 0.1) // warten bis der Druck ist abgebaut
+    {
+      if (cycle_step_delay.delay_time_is_up(4000)) { // Restluft kann entweichen
+        set_loop_completed();
+      }
+    }
+  };
 };
 // -----------------------------------------------------------------------------
-class Entspannen : public Cycle_step{
-  String get_display_text(){return "ENTSPANNEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
+class Entspannen : public Cycle_step {
+  String get_display_text() { return "ENTSPANNEN"; }
+
+  void do_initial_stuff() {
+    cycle_step_delay.set_unstarted();
+    zyl_klemmblock.set(0);
+  };
+  void do_loop_stuff() {
+    if (cycle_step_delay.delay_time_is_up(500)) {
+      set_loop_completed();
+    }
+  };
 };
 // -----------------------------------------------------------------------------
-class Wippenhebel : public Cycle_step{
-  String get_display_text(){return "WIPPENHEBEL";}
-  
+class Wippenhebel : public Cycle_step {
+  String get_display_text() { return "WIPPENHEBEL"; }
+
   void do_initial_stuff(){};
-  void do_loop_stuff(){};
+  void do_loop_stuff() {
+    zyl_wippenhebel.stroke(1500, 1000); //(Ausfahrzeit,Einfahrzeit)
+
+    if (zyl_wippenhebel.stroke_completed()) {
+      set_loop_completed();
+    }
+  };
 };
 // -----------------------------------------------------------------------------
-class Zurueckfahren : public Cycle_step{
-  String get_display_text(){return "ZURUECKFAHREN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
+class Zurueckfahren : public Cycle_step {
+  String get_display_text() { return "ZURUECKFAHREN"; }
+
+  void do_initial_stuff() {
+    zyl_feder_zuluft.set(1); // 1=füllen 0=geschlossen
+    zyl_feder_abluft.set(0); // 1=geschlossen 0=entlüften
+    cycle_step_delay.set_unstarted();
+  };
+  void do_loop_stuff() {
+    if (startposition_erreicht) {
+      zyl_feder_zuluft.set(0);    // 1=füllen 0=geschlossen
+      zyl_feder_abluft.set(0);    // 1=geschlossen 0=entlüften
+      if (federdruck_float < 0.1) // warten bis der Druck abgebaut ist
+      {
+        if (cycle_step_delay.delay_time_is_up(500)) {
+          eepromCounter.count_one_up(shorttimeCounter);
+          eepromCounter.count_one_up(longtimeCounter);
+          set_loop_completed();
+        }
+      }
+    }
+  };
 };
 // -----------------------------------------------------------------------------
-class Pause : public Cycle_step{
-  String get_display_text(){return "PAUSE";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
+class Pause : public Cycle_step {
+  String get_display_text() { return "PAUSE"; }
+  byte testZyklenZaehler;
+  unsigned long abkuehldauer;
+
+  void do_initial_stuff() {
+    testZyklenZaehler++;
+    abkuehldauer = eepromCounter.get_value(longCooldownTime) * 1000;
+  };
+
+  void do_loop_stuff() {
+    if (testZyklenZaehler == eepromCounter.get_value(cyclesInARow)) {
+      if (cycle_step_delay.delay_time_is_up(abkuehldauer)) {
+        testZyklenZaehler = 0;
+        set_loop_completed();
+      }
+    } else {
+      set_loop_completed();
+    }
+  };
 };
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
@@ -1052,10 +1230,10 @@ void setup() {
   pinMode(red_light, OUTPUT);
   delay(2000);
 
-//------------------------------------------------
+  //------------------------------------------------
   // PUSH THE CYCLE STEPS INTO THE VECTOR CONTAINER:
   // PUSH SEQUENCE = CYCLE SEQUENCE !
-  main_cycle_steps.push_back(new Aufwecken);
+  main_cycle_steps.push_back(new Aufwecken_);
   main_cycle_steps.push_back(new Vorschieben);
   main_cycle_steps.push_back(new Schneiden);
   main_cycle_steps.push_back(new Festklemmen);
@@ -1067,161 +1245,91 @@ void setup() {
   main_cycle_steps.push_back(new Wippenhebel);
   main_cycle_steps.push_back(new Zurueckfahren);
   main_cycle_steps.push_back(new Pause);
-//------------------------------------------------
-
-
+  //------------------------------------------------
+  // CONFIGURE THE STATE CONTROLLER:
+  int no_of_main_cycle_steps = main_cycle_steps.size();
+  state_controller.set_no_of_steps(no_of_main_cycle_steps);
+  //------------------------------------------------
 
   einschaltventil.set(1); //ÖFFNET DAS HAUPTLUFTVENTIL
 
   Serial.println("EXIT SETUP");
 }
 
+// MAIN LOOP
+// *******************************************************************
+
+void run_step_or_auto_mode() {
+
+  // IF STEP IS COMPLETED SWITCH TO NEXT STEP:
+  if (main_cycle_steps[state_controller.get_current_step()]->is_completed()) {
+    state_controller.switch_to_next_step();
+    reset_flag_of_current_step();
+  }
+
+  // IN STEP MODE, THE RIG STOPS AFTER EVERY COMPLETED STEP:
+  if (state_controller.step_switch_has_happend()) {
+    if (state_controller.is_in_step_mode()) {
+      state_controller.set_machine_stop();
+    }
+    // IF MACHINE STATE IS RUNNING IN AUTO MODE,
+    // THE "MACHINE STOPPED ERROR TIMEOUT" RESETS AFTER EVERY STEP:
+    if (state_controller.is_in_auto_mode() &&
+        state_controller.machine_is_running()) {
+      // machine_stopped_error_timeout.reset_time();
+    }
+  }
+
+  // IF MACHINE STATE IS "RUNNING", RUN CURRENT STEP:
+  if (state_controller.machine_is_running()) {
+    main_cycle_steps[state_controller.get_current_step()]->do_stuff();
+  }
+
+  // MEASURE AND DISPLAY PRESSURE
+  if (!state_controller.is_in_error_mode()) {
+    // measure_and_display_max_force();
+  }
+}
+
 void loop() {
   read_n_toggle();
-  lights();
   nextion_loop();
 
-  // HIER NEUE LOGIK IMPLEMENTIEREN:
-  // machineRunning = ((autoMode && autoModeRunning) || (stepMode &&
-  // stepModeRunning)
+  // UPDATE DISPLAY:
 
-  if (machine_running) {
-    // HIER NEUE LOGIK IMPLEMENTIEREN:
-    // if (machineRunning && nextStepTimer.timedOut)
+  // MONITOR EMERGENCY SIGNAL:
+  // monitor_emergency_signal();
 
-    restpausenzeit = (timer_next_step - (millis() - prev_time)) /
-                     1000; //[s]calculates remaining pause time for the display
+  // DO NOT WATCH TIMEOUTS IF MACHINE IS NOT RUNNING (PAUSE):
+  if (!state_controller.machine_is_running()) {
+    // machine_stopped_error_timeout.reset_time();
+    // bandsensor_timeout.reset_time();
+  }
 
-    if (clearance_next_step && (millis() - prev_time) > timer_next_step) {
+  // MONITOR ERRORS ONLY WHEN RIG IS RUNNING IN AUTO MODE:
+  if (state_controller.machine_is_running() &&
+      state_controller.is_in_auto_mode()) {
+    // monitor_error_timeouts();
+    // monitor_temperature_error();
+  }
 
-      switch (cycle_step) {
+  // RUN STEP OR AUTO MODE:
+  if (state_controller.is_in_step_mode() ||
+      state_controller.is_in_auto_mode()) {
+    run_step_or_auto_mode();
+  }
 
-      case AUFWECKEN: // GERÄT AUFWECKEN (WIPPENHEBEL ZIEHEN):
-        zyl_wippenhebel.stroke(1500, 1000); //(Ausfahrzeit,Einfahrzeit)
+  // RUN RESET IF RESET IS ACTIVATED:
+  if (state_controller.reset_mode_is_active()) {
+    // reset_machine();
+    // stroke_wippenhebel();
+    state_controller.set_reset_mode(0);
 
-        if (zyl_wippenhebel.stroke_completed()) {
-          SwitchToNextStep();
-        }
-        break;
-
-      case VORSCHIEBEN: // BAND VORSCHIEBEN:
-        bandVorschubDauer = eepromCounter.get_value(strapEjectFeedTime) * 1000;
-        zyl_spanntaste.stroke(bandVorschubDauer, 300); //(Vorschubdauer,Pause)
-
-        if (zyl_spanntaste.stroke_completed()) {
-          SwitchToNextStep();
-        }
-        break;
-
-      case SCHNEIDEN: // BAND SCHNEIDEN:
-        zyl_messer.stroke(1500, 500);
-
-        if (zyl_messer.stroke_completed()) {
-          SwitchToNextStep();
-        }
-        break;
-
-      case FESTKLEMMEN: // BAND IM KLEMMBLOCK FESTKLEMMEN:
-        zyl_klemmblock.set(1);
-        {
-          prev_time = millis();
-          timer_next_step = 500;
-          SwitchToNextStep();
-        }
-        break;
-
-      case STARTDRUCK: // STARTKRAFT AUFBAUEN:
-        if (!startfuellung_running) {
-          startfuellung_running = true;
-          startfuelltimer = millis();
-        }
-        zyl_feder_zuluft.set(1); // 1=füllen 0=geschlossen
-        zyl_feder_abluft.set(1); // 1=geschlossen 0=entlüften
-        if ((millis() - startfuelltimer) >
-            eepromCounter.get_value(startfuelldauer)) {
-          zyl_feder_zuluft.set(0); // 1=füllen 0=geschlossen
-          startfuellung_running = false;
-          SwitchToNextStep();
-        }
-        break;
-
-      case SPANNEN:            // BAND SPANNEN:
-        zyl_spanntaste.set(1); // Spanntaste betätigen
-        if (endposition_erreicht) {
-          prev_time = millis();
-          timer_next_step = 500; // Spanntaste bleibt noch kurz betätigt, damit
-                                 // das Gerät die Maximalkraft aufbaut
-          SwitchToNextStep();
-        }
-        break;
-
-      case SCHWEISSEN:                        // BAND SCHWEISSEN:
-        zyl_spanntaste.set(0);                // Spanntaste lösen
-        zyl_schweisstaste.stroke(1000, 2000); // Schweisstaste betätigen
-
-        if (zyl_schweisstaste.stroke_completed()) {
-          SwitchToNextStep();
-        }
-        break;
-
-      case ABKUEHLEN:            // ZYLINDER ENTLÜFTEN und ABKÜHLEN:
-        zyl_feder_zuluft.set(0); // 1=füllen 0=geschlossen
-        zyl_feder_abluft.set(0); // 1=geschlossen 0=entlüften
-
-        if (federdruck_float < 0.1) // warten bis der Druck ist abgebaut
-        {
-          SwitchToNextStep();
-          prev_time = millis();
-          timer_next_step = 4000; // Restluft kann entweichen
-        }
-        break;
-
-      case ENTSPANNEN: // KLEMMBLOCK LöSEN:
-        zyl_klemmblock.set(0);
-        SwitchToNextStep();
-        prev_time = millis();
-        timer_next_step = 500;
-        break;
-
-      case WIPPENHEBEL: // BANDSPANNUNG LÖSEN:
-        zyl_wippenhebel.stroke(1500, 1000);
-
-        if (zyl_wippenhebel.stroke_completed()) {
-          SwitchToNextStep();
-        }
-        break;
-
-      case ZURUECKFAHREN:        // BREMSZYLINDER ZURÜCKFAHREN:
-        zyl_feder_zuluft.set(1); // 1=füllen 0=geschlossen
-        zyl_feder_abluft.set(0); // 1=geschlossen 0=entlüften
-
-        if (startposition_erreicht) {
-          zyl_feder_zuluft.set(0);    // 1=füllen 0=geschlossen
-          zyl_feder_abluft.set(0);    // 1=geschlossen 0=entlüften
-          if (federdruck_float < 0.1) // warten bis der Druck abgebaut ist
-          {
-            SwitchToNextStep();
-            prev_time = millis();
-            timer_next_step = 2000; // Restluft kann entweichen
-            eepromCounter.count_one_up(shorttimeCounter);
-            eepromCounter.count_one_up(longtimeCounter);
-          }
-        }
-        break;
-
-      case PAUSE: // Abkuehlpause
-        static byte testZyklenZaehler;
-        testZyklenZaehler++;
-        if (testZyklenZaehler == eepromCounter.get_value(cyclesInARow)) {
-          prev_time = millis();
-          timer_next_step = eepromCounter.get_value(longCooldownTime) *
-                            1000; // Gerät kann abkühlen
-          testZyklenZaehler = 0;
-        }
-
-        SwitchToNextStep();
-        break;
-      } // END switch (cycle_step)
+    if (state_controller.run_after_reset_is_active()) {
+      state_controller.set_auto_mode();
+      state_controller.set_machine_running();
+    } else {
+      state_controller.set_step_mode();
     }
   }
 }

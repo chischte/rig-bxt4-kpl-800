@@ -42,32 +42,6 @@
 
 State_controller state_controller;
 
-//*****************************************************************************
-// DEFINE NAMES AND SEQUENCE OF STEPS FOR THE MAIN CYCLE:
-//*****************************************************************************
-// enum mainCycleSteps {
-//   AUFWECKEN,
-//   VORSCHIEBEN,
-//   SCHNEIDEN,
-//   FESTKLEMMEN,
-//   STARTDRUCK,
-//   SPANNEN,
-//   SCHWEISSEN,
-//   ABKUEHLEN,
-//   ENTSPANNEN,
-//   WIPPENHEBEL,
-//   ZURUECKFAHREN,
-//   PAUSE,
-//   endOfMainCycleEnum
-// };
-
-// int numberOfMainCycleSteps = endOfMainCycleEnum;
-// // DEFINE NAMES TO DISPLAY ON THE TOUCH SCREEN:
-// String cycle_name[] = {"AUFWECKEN",   "VORSCHIEBEN",   "SCHNEIDEN",
-//                        "FESTKLEMMEN", "STARTDRUCK",    "SPANNEN",
-//                        "SCHWEISSEN",  "ABKUELHEN",     "ENTSPANNEN",
-//                        "WIPPENHEBEL", "ZURUECKFAHREN", "PAUSE"};
-
 // KNOBS AND POTENTIOMETERS:
 #define start_button CONTROLLINO_A6
 #define stop_button CONTROLLINO_A5
@@ -174,13 +148,10 @@ void reset_flag_of_current_step() {
   main_cycle_steps[state_controller.get_current_step()]->reset_flags();
 }
 
-//***************************************************************************
-// DECLARATION OF VARIABLES
-//***************************************************************************
+// NEXTION VARIABLES -----------------------------------------------------------
 int nex_current_page;
 
-//***************************************************************************
-// NEXTION SWITCH STATES LIST
+// NEXTION SWITCH STATES LIST --------------------------------------------------
 // Every nextion switch button (dualstate) needs a switchstate variable to
 // control switchtoggle Nextion buttons(momentary) need a variable too, to
 // prevent screen flickering
@@ -213,10 +184,8 @@ unsigned long nex_prev_restpausenzeit;
 unsigned long button_push_stopwatch;
 unsigned long counter_reset_stopwatch;
 unsigned long nex_update_timer;
-//***************************************************************************
-//***************************************************************************
-// DECLARATION OF OBJECTS TO BE READ FROM NEXTION
-//***************************************************************************
+
+// NEXTION OBJECTS -------------------------------------------------------------
 
 // PAGE 0:
 NexPage nex_page0 = NexPage(0, 0, "page0");
@@ -256,10 +225,6 @@ NexButton nexButton2Right = NexButton(3, 10, "b3");
 NexButton nexButton3Left = NexButton(3, 12, "b4");
 NexButton nexButton3Right = NexButton(3, 14, "b5");
 
-//***************************************************************************
-// END OF OBJECT DECLARATION
-//***************************************************************************
-
 char buffer[100] = {0}; // This is needed only if you are going to receive a
                         // text from the display. You can remove it otherwise.
 
@@ -281,16 +246,10 @@ NexTouch *nex_listen_list[] = {
     // END OF DECLARATION
     NULL // String terminated
 };
-//***************************************************************************
-// END OF TOUCH EVENT LIST
-//***************************************************************************
-//***************************************************************************
-// TOUCH EVENT FUNCTIONS //PushCallback = Press event //PopCallback = Release
-// event
-//***************************************************************************
-//*************************************************
-// TOUCH EVENT FUNCTIONS PAGE 1 - LEFT SIDE
-//*************************************************
+// NEXTION TOUCH EVENT FUNCTIONS ***********************************************
+
+// TOUCH EVENT FUNCTIONS PAGE 1 - LEFT SIDE ------------------------------------
+
 void nex_switch_play_pausePushCallback(void *ptr) {
   machine_running = !machine_running;
   if (machine_running) {
@@ -322,9 +281,9 @@ void nex_but_reset_cyclePushCallback(void *ptr) {
   cycle_step = 0;
   step_mode = true;
 }
-//*************************************************
-// TOUCH EVENT FUNCTIONS PAGE 1 - RIGHT SIDE
-//*************************************************
+
+// TOUCH EVENT FUNCTIONS PAGE 1 - RIGHT SIDE -----------------------------------
+
 void nex_zyl_feder_zuluftPushCallback(void *ptr) {
   zyl_feder_zuluft.toggle();
   nex_state_zyl_feder_zuluft = !nex_state_zyl_feder_zuluft;
@@ -355,9 +314,7 @@ void nex_einschaltventilPushCallback(void *ptr) {
   nex_state_einschaltventil = !nex_state_einschaltventil;
 }
 
-//*************************************************
-// TOUCH EVENT FUNCTIONS PAGE 2 - LEFT SIDE
-//*************************************************
+// TOUCH EVENT FUNCTIONS PAGE 2 - LEFT SIDE ------------------------------------
 
 void nex_but_slider1_leftPushCallback(void *ptr) {
   long newValue = eepromCounter.get_value(startfuelldauer) - 100;
@@ -375,9 +332,8 @@ void nex_but_slider1_rightPushCallback(void *ptr) {
   }
 }
 
-//*************************************************
-// TOUCH EVENT FUNCTIONS PAGE 2 - RIGHT SIDE
-//*************************************************
+// TOUCH EVENT FUNCTIONS PAGE 2 - RIGHT SIDE -----------------------------------
+
 void nex_but_reset_shorttime_counterPushCallback(void *ptr) {
   eepromCounter.set_value(shorttimeCounter, 0);
   // RESET LONGTIME COUNTER IF RESET BUTTON IS PRESSED LONG ENOUGH:
@@ -388,9 +344,8 @@ void nex_but_reset_shorttime_counterPushCallback(void *ptr) {
 void nex_but_reset_shorttime_counterPopCallback(void *ptr) {
   reset_stopwatch_active = false;
 }
-//*************************************************
-// TOUCH EVENT FUNCTIONS PAGE 3
-//*************************************************
+// TOUCH EVENT FUNCTIONS PAGE 3 ------------------------------------------------
+
 void nexButton1LeftPushCallback(void *ptr) {
   long newValue = eepromCounter.get_value(cyclesInARow) - 1;
   eepromCounter.set_value(cyclesInARow, newValue);
@@ -438,9 +393,8 @@ void nexButton3RightPushCallback(void *ptr) {
   }
 }
 
-//*************************************************
-// TOUCH EVENT FUNCTIONS PAGE CHANGES
-//*************************************************
+// TOUCH EVENT FUNCTIONS PAGE CHANGES ------------------------------------------
+
 void nex_page0PushCallback(void *ptr) { nex_current_page = 0; }
 
 void nex_page1PushCallback(void *ptr) {
@@ -479,32 +433,15 @@ void nex_page3PushCallback(void *ptr) {
   nexPrevLongCooldownTime = 0;
   nexPrevStrapEjectFeedTime = 0;
 }
-//***************************************************************************
-// END OF TOUCH EVENT FUNCTIONS
-//***************************************************************************
+// END OF NEXTION TOUCH EVENT FUNCTIONS ****************************************
 
-//***************************************************************************
+// NEXTION SETUP ***************************************************************
 
-//***************************************************************************
-void nextion_setup()
-//***************************************************************************
-//***************************************************************************
-{                      // START NEXTION SETUP
+void nextion_setup() { // START NEXTION SETUP
   Serial2.begin(9600); // Start serial comunication at baud=9600
 
-  //***************************************************************************
-  // INCREASE BAUD RATE
-  //***************************************************************************
-  /*
-   delay(500);
-   Serial2.print("baud=38400");
-   send_to_nextion();
-   Serial2.end();
-   Serial2.begin(38400);
-   */
-  //***************************************************************************
-  // REGISTER THE EVENT CALLBACK FUNCTIONS
-  //***************************************************************************
+  // REGISTER EVENT CALLBACK FUNCTIONS -----------------------------------------
+
   // PAGE 0 1 2:
   nex_page0.attachPush(nex_page0PushCallback);
   nex_page1.attachPush(nex_page1PushCallback);
@@ -546,38 +483,14 @@ void nextion_setup()
   nex_but_reset_shorttime_counter.attachPop(
       nex_but_reset_shorttime_counterPopCallback);
 
-  //***************************************************************************
-  // END OF REGISTER
-  //***************************************************************************
+  // ---------------------------------------------------------------------------
+
   delay(3000);
   sendCommand("page 1"); // SWITCH NEXTION TO PAGE X
   send_to_nextion();
 
 } // END OF NEXTION SETUP
 
-void update_main_cycle_name() {
-  if (nex_prev_cycle_step != state_controller.get_current_step()) {
-    String number = String(state_controller.get_current_step() + 1);
-    String name = get_main_cycle_display_string();
-    Serial.println(number + " " + name);
-    display_text_in_field(number + " " + name, "t0");
-    nex_prev_cycle_step = state_controller.get_current_step();
-  }
-}
-
-void update_cycle_name() {
-  if (state_controller.is_in_step_mode() ||
-      state_controller.is_in_auto_mode()) {
-    update_main_cycle_name();
-  }
-}
-
-String get_main_cycle_display_string() {
-  int current_step = state_controller.get_current_step();
-  String display_text_cycle_name =
-      main_cycle_steps[current_step]->get_display_text();
-  return display_text_cycle_name;
-}
 // NEXTION GENERAL DISPLAY FUNCTIONS *******************************************
 
 void send_to_nextion() {
@@ -652,10 +565,48 @@ void set_momentary_button_high_or_low(String button, bool state) {
   Serial2.print("click " + button + "," + state);
   send_to_nextion();
 }
-//***************************************************************************
-void nextion_loop()
-//***************************************************************************
-{ // START NEXTION LOOP
+
+void update_main_cycle_name() {
+  if (nex_prev_cycle_step != state_controller.get_current_step()) {
+    String number = String(state_controller.get_current_step() + 1);
+    String name = get_main_cycle_display_string();
+    Serial.println(number + " " + name);
+    display_text_in_field(number + " " + name, "t0");
+    nex_prev_cycle_step = state_controller.get_current_step();
+  }
+}
+
+void update_cycle_name() {
+  if (state_controller.is_in_step_mode() ||
+      state_controller.is_in_auto_mode()) {
+    update_main_cycle_name();
+  }
+}
+
+String get_main_cycle_display_string() {
+  int current_step = state_controller.get_current_step();
+  String display_text_cycle_name =
+      main_cycle_steps[current_step]->get_display_text();
+  return display_text_cycle_name;
+}
+
+// NEXTION TOUCH EVENT FUNCTIONS ***********************************************
+
+// TOUCH EVENT FUNCTIONS PAGE 1 - LEFT SIDE ------------------------------------
+
+// sdhajkflsdhfklsdfhsdakfhdsjkflhsdafjklshdajk
+// sdhajkflsdhfklsdfhsdakfhdsjkflhsdafjklshdajk
+// sdhajkflsdhfklsdfhsdakfhdsjkflhsdafjklshdajk
+// sdhajkflsdhfklsdfhsdakfhdsjkflhsdafjklshdajk
+// sdhajkflsdhfklsdfhsdakfhdsjkflhsdafjklshdajk
+// sdhajkflsdhfklsdfhsdakfhdsjkflhsdafjklshdajk
+// sdhajkflsdhfklsdfhsdakfhdsjkflhsdafjklshdajk
+// sdhajkflsdhfklsdfhsdakfhdsjkflhsdafjklshdajk
+// sdhajkflsdhfklsdfhsdakfhdsjkflhsdafjklshdajk
+
+
+// NEXTION DISPLAY LOOPS *******************************************************
+void nextion_loop() {
 
   nexLoop(nex_listen_list); // check for any touch event
   //***************************************************************************

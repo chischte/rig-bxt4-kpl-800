@@ -937,103 +937,6 @@ void read_n_toggle() {
 
 } // END OF READ_N_TOGGLE
 
-
-// CREATE VECTOR CONTAINER FOR THE CYCLE STEPS OBJECTS *************************
-
-int Cycle_step::object_count = 0; // enable object counting
-std::vector<Cycle_step *> main_cycle_steps;
-
-// void reset_flag_of_current_step() { main_cycle_steps[state_controller.get_current_step()]->reset_flags(); }
-
-// CREATE CYCLE STEP CLASSES ***************************************************
-// -----------------------------------------------------------------------------
-class Aufwecken : public Cycle_step{
-  String get_display_text(){return "AUFWECKEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Vorschieben : public Cycle_step{
-  String get_display_text(){return "VORSCHIEBEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Schneiden : public Cycle_step{
-  String get_display_text(){return "SCHNEIDEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Festklemmen : public Cycle_step{
-  String get_display_text(){return "FESTKLEMMEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Startdruck : public Cycle_step{
-  String get_display_text(){return "STARTDRUCK";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Spannen : public Cycle_step{
-  String get_display_text(){return "SPANNEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Schweissen : public Cycle_step{
-  String get_display_text(){return "SCHWEISSEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Abkuehlen : public Cycle_step{
-  String get_display_text(){return "ABKUELHEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Entspannen : public Cycle_step{
-  String get_display_text(){return "ENTSPANNEN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Wippenhebel : public Cycle_step{
-  String get_display_text(){return "WIPPENHEBEL";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Zurueckfahren : public Cycle_step{
-  String get_display_text(){return "ZURUECKFAHREN";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-class Pause : public Cycle_step{
-  String get_display_text(){return "PAUSE";}
-  
-  void do_initial_stuff(){};
-  void do_loop_stuff(){};
-};
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-
 void setup() {
   eepromCounter.setup(eepromMinAddress, eepromMaxAddress, numberOfEepromValues);
   Serial.begin(115200); // start serial connection
@@ -1051,25 +954,6 @@ void setup() {
   pinMode(green_light, OUTPUT);
   pinMode(red_light, OUTPUT);
   delay(2000);
-
-//------------------------------------------------
-  // PUSH THE CYCLE STEPS INTO THE VECTOR CONTAINER:
-  // PUSH SEQUENCE = CYCLE SEQUENCE !
-  main_cycle_steps.push_back(new Aufwecken);
-  main_cycle_steps.push_back(new Vorschieben);
-  main_cycle_steps.push_back(new Schneiden);
-  main_cycle_steps.push_back(new Festklemmen);
-  main_cycle_steps.push_back(new Startdruck);
-  main_cycle_steps.push_back(new Spannen);
-  main_cycle_steps.push_back(new Schweissen);
-  main_cycle_steps.push_back(new Abkuehlen);
-  main_cycle_steps.push_back(new Entspannen);
-  main_cycle_steps.push_back(new Wippenhebel);
-  main_cycle_steps.push_back(new Zurueckfahren);
-  main_cycle_steps.push_back(new Pause);
-//------------------------------------------------
-
-
 
   einschaltventil.set(1); //ÖFFNET DAS HAUPTLUFTVENTIL
 

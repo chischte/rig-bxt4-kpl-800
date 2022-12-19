@@ -24,28 +24,22 @@
  */
 
 // #include <Arduino.h>
-#include <ArduinoSTL.h>  //       https://github.com/mike-matera/ArduinoSTL
+#include <ArduinoSTL.h> //       https://github.com/mike-matera/ArduinoSTL
 #include <Controllino.h> //       PIO Controllino Library
-#include <Cylinder.h>    //       https://github.com/chischte/cylinder-library
+#include <Cylinder.h> //       https://github.com/chischte/cylinder-library
 #include <EEPROM_Counter.h> //       https://github.com/chischte/eeprom-counter-library
 #include <Insomnia.h> //             https://github.com/chischte/insomnia-delay-library
 #include <Nextion.h> //              PIO Nextion library
-#include <SD.h>      //              PIO Adafruit SD library
+#include <SD.h> //              PIO Adafruit SD library
 
-#include <cycle_step.h>       //     blueprint of a cycle step
+#include <cycle_step.h> //     blueprint of a cycle step
 #include <state_controller.h> //     keeps track of machine states
 
-//*****************************************************************************
-// PRE-SETUP SECTION / PIN LAYOUT
-//*****************************************************************************
+// PRE-SETUP SECTION / PIN LAYOUT **********************************************
 
 State_controller state_controller;
 
 // KNOBS AND POTENTIOMETERS:
-#define start_button CONTROLLINO_A6
-#define stop_button CONTROLLINO_A5
-#define green_light CONTROLLINO_D9
-#define red_light CONTROLLINO_D8
 
 // SENSORS:
 #define bandsensor_oben CONTROLLINO_A0
@@ -65,55 +59,35 @@ Cylinder zyl_messer(CONTROLLINO_D6);
 Cylinder zyl_schweisstaste(CONTROLLINO_D4);
 Cylinder zyl_loescherblink(CONTROLLINO_D11);
 
-Insomnia errorBlinkTimer;
 Insomnia cycle_step_delay;
+Insomnia nex_force_update_delay;
+Insomnia nex_reset_button_timeout(10000); // pushtime to reset counter
 
-//*****************************************************************************
-// DECLARATION OF VARIABLES / DATA TYPES
-//*****************************************************************************
+// GLOBAL VARIABLES ------------------------------------------------------------
 // bool (1/0 or true/false)
 // byte (0-255)
 // int   (-32,768 to 32,767) / unsigned int: 0 to 65,535
 // long  (-2,147,483,648 to 2,147,483,647)
 // float (6-7 Digits)
-//*****************************************************************************
+
 bool machine_running = false;
 bool step_mode = true;
 bool clearance_next_step = false;
-bool error_blink = false;
 bool band_vorhanden = false;
 bool startposition_erreicht;
 bool endposition_erreicht;
-bool startfuellung_running = false;
 
 // byte Testzyklenzaehler;
 byte cycle_step = 0;
 
-int calmcounter;
-unsigned long timer_next_step;
-
-unsigned int federdruck_beruhigt;
-unsigned int prev_federdruck_beruhigt;
-
 unsigned long restpausenzeit;
-unsigned long timer_error_blink;
 unsigned long runtime;
 unsigned long runtime_stopwatch;
 unsigned long startfuelltimer;
-unsigned long prev_time;
-long bandVorschubDauer;
-long calmcountersum;
 
-// DRUCKRECHNUNG:
-float federdruck_float;
-float federdruck_smoothed;
-unsigned long federdruck_mbar;
-unsigned int federdruck_mbar_int;
-
-// KRAFTRECHNUNG:
-float federkraft;
-unsigned long federkraft_smoothed;
-unsigned int federkraft_int;
+// PUBLIC DRUCK UND KRAFT:
+float pressure_float;
+unsigned int force_int;
 
 // SET UP EEPROM COUNTER:
 enum eeprom_counter {
@@ -123,17 +97,17 @@ enum eeprom_counter {
   cycles_in_a_row,
   long_cooldown_time,
   strap_eject_feed_time,
-  endOfEepromEnum
+  end_of_eeprom_enum
 };
-int numberOfEepromValues = endOfEepromEnum;
-int eepromMinAddress = 0;
-int eepromMaxAddress = 4095;
+int number_of_eeprom_values = end_of_eeprom_enum;
+int eeprom_min_address = 0;
+int eeprom_max_address = 4095;
 EEPROM_Counter eeprom_counter;
 
 // DECLARE FUNCTIONS IF NEEDED FOR THE COMPILER: *******************************
 void reset_flag_of_current_step();
 String get_main_cycle_display_string();
-void display_text_in_field(String text, String textField);
+void display_text_in_field(String text, String text_field);
 void send_to_nextion();
 
 // CREATE VECTOR CONTAINER FOR THE CYCLE STEPS OBJECTS *************************
@@ -143,17 +117,15 @@ std::vector<Cycle_step *> main_cycle_steps;
 
 // NON NEXTION FUNCTIONS *******************************************************
 
-void reset_flag_of_current_step() {
-  main_cycle_steps[state_controller.get_current_step()]->reset_flags();
-}
+void reset_flag_of_current_step() { main_cycle_steps[state_controller.get_current_step()]->reset_flags(); }
 
 // NEXTION VARIABLES -----------------------------------------------------------
 int nex_current_page;
 
 // NEXTION SWITCH STATES LIST --------------------------------------------------
 // Every nextion switch button (dualstate) needs a switchstate variable to
-// control switchtoggle Nextion buttons(momentary) need a variable too, to
-// prevent screen flickering
+// control switchtoggle. Every nextion button (momentary) needs a variable to
+// prevent screen flickering.
 
 bool nex_state_einschaltventil;
 bool nex_state_zyl_feder_zuluft;
@@ -167,22 +139,18 @@ bool nex_state_machine_running;
 bool nex_state_band_vorhanden = 1;
 //***************************************************************************
 bool nex_prev_step_mode = true;
-bool stopwatch_running;
-bool reset_stopwatch_active;
 
 byte nex_prev_cycle_step;
-long nexPrevcycles_in_a_row;
-long nexPrevlong_cooldown_time;
-long nexPrevstrap_eject_feed_time;
+long nex_prev_cycles_in_a_row;
+long nex_prev_long_cooldown_time;
+long nex_prev_strap_eject_feed_time;
 long nex_prev_shorttime_counter;
 long nex_prev_longtime_counter;
 unsigned int nex_prev_startfuelldauer;
-unsigned int nex_prev_federkraft_int;
+unsigned int nex_prev_force_int;
 unsigned int nex_prev_federdruck;
 unsigned long nex_prev_restpausenzeit;
 unsigned long button_push_stopwatch;
-unsigned long counter_reset_stopwatch;
-unsigned long nex_update_timer;
 
 // NEXTION OBJECTS -------------------------------------------------------------
 
@@ -190,7 +158,7 @@ unsigned long nex_update_timer;
 NexPage nex_page0 = NexPage(0, 0, "page0");
 
 // PAGE 1 - LEFT SIDE:
-NexPage nex_page1 = NexPage(1, 0, "page1");
+NexPage nex_page_1 = NexPage(1, 0, "page1");
 NexButton nex_but_stepback = NexButton(1, 6, "b1");
 NexButton nex_but_stepnxt = NexButton(1, 7, "b2");
 NexButton nex_but_reset_cycle = NexButton(1, 5, "b0");
@@ -208,115 +176,112 @@ NexButton nex_zyl_schweisstaste = NexButton(1, 8, "b3");
 NexButton nex_einschaltventil = NexButton(1, 16, "bt6");
 
 // PAGE 2 - LEFT SIDE:
-NexPage nex_page2 = NexPage(2, 0, "page2");
-NexButton nex_but_slider1_left = NexButton(2, 5, "b1");
-NexButton nex_but_slider1_right = NexButton(2, 6, "b2");
+NexPage nex_page_2 = NexPage(2, 0, "page2");
+NexButton nex_but_slider_1_left = NexButton(2, 5, "b1");
+NexButton nex_but_slider_1_right = NexButton(2, 6, "b2");
 
 // PAGE 2 - RIGHT SIDE:
 NexButton nex_but_reset_shorttime_counter = NexButton(2, 15, "b4");
 
 // PAGE 3:
-NexPage nex_page3 = NexPage(3, 0, "page3");
-NexButton nexButton1Left = NexButton(3, 5, "b1");
-NexButton nexButton1Right = NexButton(3, 6, "b2");
-NexButton nexButton2Left = NexButton(3, 8, "b0");
-NexButton nexButton2Right = NexButton(3, 10, "b3");
-NexButton nexButton3Left = NexButton(3, 12, "b4");
-NexButton nexButton3Right = NexButton(3, 14, "b5");
+NexPage nex_page_3 = NexPage(3, 0, "page3");
+NexButton nex_button_1_left = NexButton(3, 5, "b1");
+NexButton nex_button_1_right = NexButton(3, 6, "b2");
+NexButton nex_button_2_left = NexButton(3, 8, "b0");
+NexButton nex_button_2_right = NexButton(3, 10, "b3");
+NexButton nex_button_3_left = NexButton(3, 12, "b4");
+NexButton nex_button_3_right = NexButton(3, 14, "b5");
 
 char buffer[100] = {0}; // This is needed only if you are going to receive a
-                        // text from the display. You can remove it otherwise.
+    // text from the display. You can remove it otherwise.
 
-//***************************************************************************
-// TOUCH EVENT LIST //DECLARATION OF TOUCH EVENTS TO BE MONITORED
-//***************************************************************************
+// NEXTION TOUCH EVENT LISTENERS -----------------------------------------------
+
 NexTouch *nex_listen_list[] = {
-    &nex_page0, &nex_page1, &nex_page2, &nex_page3,
+    // PAGES
+    &nex_page0, &nex_page_1, &nex_page_2, &nex_page_3,
     // PAGE 0 1 2:
-    &nex_but_reset_shorttime_counter, &nex_but_stepback, &nex_but_stepnxt,
-    &nex_but_reset_cycle, &nex_but_slider1_left, &nex_but_slider1_right,
-    &nex_switch_play_pause, &nex_switch_mode, &nex_zyl_messer,
-    &nex_zyl_klemmblock, &nex_zyl_feder_zuluft, &nex_zyl_feder_abluft,
-    &nex_zyl_wippenhebel, &nex_mot_band_unten, &nex_zyl_schweisstaste,
+    &nex_but_reset_shorttime_counter, &nex_but_stepback, &nex_but_stepnxt, &nex_but_reset_cycle, &nex_but_slider_1_left,
+    &nex_but_slider_1_right, &nex_switch_play_pause, &nex_switch_mode, &nex_zyl_messer, &nex_zyl_klemmblock,
+    &nex_zyl_feder_zuluft, &nex_zyl_feder_abluft, &nex_zyl_wippenhebel, &nex_mot_band_unten, &nex_zyl_schweisstaste,
     &nex_einschaltventil,
     // PAGE 3:
-    &nexButton1Left, &nexButton1Right, &nexButton2Left, &nexButton2Right,
-    &nexButton3Left, &nexButton3Right,
+    &nex_button_1_left, &nex_button_1_right, &nex_button_2_left, &nex_button_2_right, &nex_button_3_left,
+    &nex_button_3_right,
     // END OF DECLARATION
     NULL // String terminated
 };
-// NEXTION TOUCH EVENT FUNCTIONS ***********************************************
+// NEXTION TOUCH EVENT FUNCTIONS -----------------------------------------------
 
 // TOUCH EVENT FUNCTIONS PAGE 1 - LEFT SIDE ------------------------------------
 
-void nex_switch_play_pausePushCallback(void *ptr) {
+void nex_switch_play_pause_push_callback(void *ptr) {
   machine_running = !machine_running;
   if (machine_running) {
     clearance_next_step = true;
   }
   nex_state_machine_running = !nex_state_machine_running;
 }
-void nex_switch_modePushCallback(void *ptr) {
+void nex_switch_mode_push_callback(void *ptr) {
   state_controller.toggle_step_auto_mode();
   step_mode = state_controller.is_in_step_mode();
   Serial2.print("click bt1,1"); // CLICK BUTTON
   send_to_nextion();
 }
-void nex_but_stepbackPushCallback(void *ptr) {
+void nex_but_stepback_push_callback(void *ptr) {
   state_controller.set_machine_stop();
   reset_flag_of_current_step();
   state_controller.set_step_mode();
   state_controller.switch_to_previous_step();
   reset_flag_of_current_step();
 }
-void nex_but_stepnxtPushCallback(void *ptr) {
+void nex_but_stepnxt_push_callback(void *ptr) {
   state_controller.set_machine_stop();
   reset_flag_of_current_step();
   state_controller.set_step_mode();
   state_controller.switch_to_next_step();
   reset_flag_of_current_step();
 }
-void nex_but_reset_cyclePushCallback(void *ptr) {
+void nex_but_reset_cycle_push_callback(void *ptr) {
   cycle_step = 0;
   step_mode = true;
 }
 
 // TOUCH EVENT FUNCTIONS PAGE 1 - RIGHT SIDE -----------------------------------
 
-void nex_zyl_feder_zuluftPushCallback(void *ptr) {
+void nex_zyl_feder_zuluft_push_callback(void *ptr) {
   zyl_feder_zuluft.toggle();
   nex_state_zyl_feder_zuluft = !nex_state_zyl_feder_zuluft;
 }
 
-void nex_zyl_feder_abluftPushCallback(void *ptr) {
+void nex_zyl_feder_abluft_push_callback(void *ptr) {
   zyl_feder_abluft.toggle();
   nex_state_zyl_feder_abluft = !nex_state_zyl_feder_abluft;
 }
 
-void nex_zyl_klemmblockPushCallback(void *ptr) {
+void nex_zyl_klemmblock_push_callback(void *ptr) {
   zyl_klemmblock.toggle();
   nex_state_zyl_klemmblock = !nex_state_zyl_klemmblock;
 }
 
-void nex_zyl_wippenhebelPushCallback(void *ptr) { zyl_wippenhebel.set(1); }
+void nex_zyl_wippenhebel_push_callback(void *ptr) { zyl_wippenhebel.set(1); }
 
-void nex_zyl_wippenhebelPopCallback(void *ptr) { zyl_wippenhebel.set(0); }
+void nex_zyl_wippenhebel_pop_callback(void *ptr) { zyl_wippenhebel.set(0); }
 
-void nex_mot_band_untenPushCallback(void *ptr) { zyl_spanntaste.set(1); }
-void nex_mot_band_untenPopCallback(void *ptr) { zyl_spanntaste.set(0); }
-void nex_zyl_schweisstastePushCallback(void *ptr) { zyl_schweisstaste.set(1); }
-void nex_zyl_schweisstastePopCallback(void *ptr) { zyl_schweisstaste.set(0); }
-void nex_zyl_messerPushCallback(void *ptr) { zyl_messer.set(1); }
-void nex_zyl_messerPopCallback(void *ptr) { zyl_messer.set(0); }
-void nex_einschaltventilPushCallback(void *ptr) {
+void nex_mot_band_unten_push_callback(void *ptr) { zyl_spanntaste.set(1); }
+void nex_mot_band_unten_pop_callback(void *ptr) { zyl_spanntaste.set(0); }
+void nex_zyl_schweisstaste_push_callback(void *ptr) { zyl_schweisstaste.set(1); }
+void nex_zyl_schweisstaste_pop_callback(void *ptr) { zyl_schweisstaste.set(0); }
+void nex_zyl_messer_push_callback(void *ptr) { zyl_messer.set(1); }
+void nex_zyl_messer_pop_callback(void *ptr) { zyl_messer.set(0); }
+void nex_einschaltventil_push_callback(void *ptr) {
   einschaltventil.toggle();
   nex_state_einschaltventil = !nex_state_einschaltventil;
 }
 
 // TOUCH EVENT FUNCTIONS PAGE 2 - LEFT SIDE ------------------------------------
 
-void decrease_slider_value(int eeprom_value_number, long min_value,
-                           long interval) {
+void decrease_slider_value(int eeprom_value_number, long min_value, long interval) {
   long current_value = eeprom_counter.get_value(eeprom_value_number);
 
   if (current_value >= (min_value + interval)) {
@@ -326,8 +291,7 @@ void decrease_slider_value(int eeprom_value_number, long min_value,
   }
 }
 
-void increase_slider_value(int eeprom_value_number, long max_value,
-                           long interval) {
+void increase_slider_value(int eeprom_value_number, long max_value, long interval) {
   long current_value = eeprom_counter.get_value(eeprom_value_number);
 
   if (current_value <= (max_value - interval)) {
@@ -337,56 +301,39 @@ void increase_slider_value(int eeprom_value_number, long max_value,
   }
 }
 
-void nex_but_slider1_leftPushCallback(void *ptr) {
-  decrease_slider_value(startfuelldauer, 0, 100);
-}
+void nex_but_slider_1_left_push_callback(void *ptr) { decrease_slider_value(startfuelldauer, 0, 100); }
 
-void nex_but_slider1_rightPushCallback(void *ptr) {
-  increase_slider_value(startfuelldauer, 7000, 100);
-}
+void nex_but_slider_1_right_push_callback(void *ptr) { increase_slider_value(startfuelldauer, 7000, 100); }
 
 // TOUCH EVENT FUNCTIONS PAGE 2 - RIGHT SIDE -----------------------------------
 
-void nex_but_reset_shorttime_counterPushCallback(void *ptr) {
+void nex_but_reset_shorttime_counter_push_callback(void *ptr) {
   eeprom_counter.set_value(shorttime_counter, 0);
   // RESET LONGTIME COUNTER IF RESET BUTTON IS PRESSED LONG ENOUGH:
-  counter_reset_stopwatch = millis();
-  reset_stopwatch_active = true;
+  // ACTIVATE TIMEOUT TO RESET LONGTIME COUNTER:
+  nex_reset_button_timeout.reset_time();
+  nex_reset_button_timeout.set_flag_activated(1);
 }
 
-void nex_but_reset_shorttime_counterPopCallback(void *ptr) {
-  reset_stopwatch_active = false;
-}
+void nex_but_reset_shorttime_counter_pop_callback(void *ptr) { nex_reset_button_timeout.set_flag_activated(0); }
 // TOUCH EVENT FUNCTIONS PAGE 3 ------------------------------------------------
 
-void nexButton1LeftPushCallback(void *ptr) {
-  decrease_slider_value(cycles_in_a_row, 0, 1);
-}
+void nex_button_1_left_push_callback(void *ptr) { decrease_slider_value(cycles_in_a_row, 0, 1); }
 
-void nexButton1RightPushCallback(void *ptr) {
-  increase_slider_value(cycles_in_a_row, 10, 1);
-}
+void nex_button_1_right_push_callback(void *ptr) { increase_slider_value(cycles_in_a_row, 10, 1); }
 
-void nexButton2LeftPushCallback(void *ptr) {
-  decrease_slider_value(long_cooldown_time, 0, 10);
-}
+void nex_button_2_left_push_callback(void *ptr) { decrease_slider_value(long_cooldown_time, 0, 10); }
 
-void nexButton2RightPushCallback(void *ptr) {
-  increase_slider_value(long_cooldown_time, 600, 10);
-}
+void nex_button_2_right_push_callback(void *ptr) { increase_slider_value(long_cooldown_time, 600, 10); }
 
-void nexButton3LeftPushCallback(void *ptr) {
-  decrease_slider_value(strap_eject_feed_time, 0, 1);
-}
-void nexButton3RightPushCallback(void *ptr) {
-  increase_slider_value(strap_eject_feed_time, 20, 1);
-}
+void nex_button_3_left_push_callback(void *ptr) { decrease_slider_value(strap_eject_feed_time, 0, 1); }
+void nex_button_3_right_push_callback(void *ptr) { increase_slider_value(strap_eject_feed_time, 20, 1); }
 
 // TOUCH EVENT FUNCTIONS PAGE CHANGES ------------------------------------------
 
-void nex_page0PushCallback(void *ptr) { nex_current_page = 0; }
+void nex_page0_push_callback(void *ptr) { nex_current_page = 0; }
 
-void nex_page1PushCallback(void *ptr) {
+void nex_page_1_push_callback(void *ptr) {
   nex_current_page = 1;
 
   // REFRESH BUTTON STATES:
@@ -405,22 +352,22 @@ void nex_page1PushCallback(void *ptr) {
   nex_state_einschaltventil = 0;
 }
 
-void nex_page2PushCallback(void *ptr) {
+void nex_page_2_push_callback(void *ptr) {
   nex_current_page = 2;
   // REFRESH BUTTON STATES:
   nex_prev_startfuelldauer = 0;
   nex_prev_shorttime_counter = 0;
   nex_prev_longtime_counter = 0;
-  nex_prev_federkraft_int = 0;
+  nex_prev_force_int = 0;
   nex_prev_federdruck = 10000;
 }
 
-void nex_page3PushCallback(void *ptr) {
+void nex_page_3_push_callback(void *ptr) {
   nex_current_page = 3;
   // REFRESH BUTTON STATES:
-  nexPrevcycles_in_a_row = 0;
-  nexPrevlong_cooldown_time = 0;
-  nexPrevstrap_eject_feed_time = 0;
+  nex_prev_cycles_in_a_row = 0;
+  nex_prev_long_cooldown_time = 0;
+  nex_prev_strap_eject_feed_time = 0;
 }
 // END OF NEXTION TOUCH EVENT FUNCTIONS ****************************************
 
@@ -432,45 +379,43 @@ void nextion_setup() { // START NEXTION SETUP
   // REGISTER EVENT CALLBACK FUNCTIONS -----------------------------------------
 
   // PAGE 0 1 2:
-  nex_page0.attachPush(nex_page0PushCallback);
-  nex_page1.attachPush(nex_page1PushCallback);
-  nex_page2.attachPush(nex_page2PushCallback);
-  nex_page3.attachPush(nex_page3PushCallback);
-  nex_but_stepback.attachPush(nex_but_stepbackPushCallback);
-  nex_but_stepnxt.attachPush(nex_but_stepnxtPushCallback);
-  nex_zyl_klemmblock.attachPush(nex_zyl_klemmblockPushCallback);
-  nex_but_reset_cycle.attachPush(nex_but_reset_cyclePushCallback);
-  nex_but_slider1_left.attachPush(nex_but_slider1_leftPushCallback);
-  nex_but_slider1_right.attachPush(nex_but_slider1_rightPushCallback);
-  nex_but_stepback.attachPush(nex_but_stepbackPushCallback);
-  nex_but_stepnxt.attachPush(nex_but_stepnxtPushCallback);
-  nex_switch_mode.attachPush(nex_switch_modePushCallback);
-  nex_switch_play_pause.attachPush(nex_switch_play_pausePushCallback);
-  nex_zyl_klemmblock.attachPush(nex_zyl_klemmblockPushCallback);
-  nex_zyl_feder_zuluft.attachPush(nex_zyl_feder_zuluftPushCallback);
-  nex_zyl_feder_abluft.attachPush(nex_zyl_feder_abluftPushCallback);
-  nex_einschaltventil.attachPush(nex_einschaltventilPushCallback);
+  nex_page0.attachPush(nex_page0_push_callback);
+  nex_page_1.attachPush(nex_page_1_push_callback);
+  nex_page_2.attachPush(nex_page_2_push_callback);
+  nex_page_3.attachPush(nex_page_3_push_callback);
+  nex_but_stepback.attachPush(nex_but_stepback_push_callback);
+  nex_but_stepnxt.attachPush(nex_but_stepnxt_push_callback);
+  nex_zyl_klemmblock.attachPush(nex_zyl_klemmblock_push_callback);
+  nex_but_reset_cycle.attachPush(nex_but_reset_cycle_push_callback);
+  nex_but_slider_1_left.attachPush(nex_but_slider_1_left_push_callback);
+  nex_but_slider_1_right.attachPush(nex_but_slider_1_right_push_callback);
+  nex_but_stepback.attachPush(nex_but_stepback_push_callback);
+  nex_but_stepnxt.attachPush(nex_but_stepnxt_push_callback);
+  nex_switch_mode.attachPush(nex_switch_mode_push_callback);
+  nex_switch_play_pause.attachPush(nex_switch_play_pause_push_callback);
+  nex_zyl_klemmblock.attachPush(nex_zyl_klemmblock_push_callback);
+  nex_zyl_feder_zuluft.attachPush(nex_zyl_feder_zuluft_push_callback);
+  nex_zyl_feder_abluft.attachPush(nex_zyl_feder_abluft_push_callback);
+  nex_einschaltventil.attachPush(nex_einschaltventil_push_callback);
   // PAGE 3:
-  nexButton1Left.attachPush(nexButton1LeftPushCallback);
-  nexButton1Right.attachPush(nexButton1RightPushCallback);
-  nexButton2Left.attachPush(nexButton2LeftPushCallback);
-  nexButton2Right.attachPush(nexButton2RightPushCallback);
-  nexButton3Left.attachPush(nexButton3LeftPushCallback);
-  nexButton3Right.attachPush(nexButton3RightPushCallback);
+  nex_button_1_left.attachPush(nex_button_1_left_push_callback);
+  nex_button_1_right.attachPush(nex_button_1_right_push_callback);
+  nex_button_2_left.attachPush(nex_button_2_left_push_callback);
+  nex_button_2_right.attachPush(nex_button_2_right_push_callback);
+  nex_button_3_left.attachPush(nex_button_3_left_push_callback);
+  nex_button_3_right.attachPush(nex_button_3_right_push_callback);
 
   //*****PUSH+POP:
-  nex_zyl_wippenhebel.attachPush(nex_zyl_wippenhebelPushCallback);
-  nex_zyl_wippenhebel.attachPop(nex_zyl_wippenhebelPopCallback);
-  nex_mot_band_unten.attachPush(nex_mot_band_untenPushCallback);
-  nex_mot_band_unten.attachPop(nex_mot_band_untenPopCallback);
-  nex_zyl_schweisstaste.attachPush(nex_zyl_schweisstastePushCallback);
-  nex_zyl_schweisstaste.attachPop(nex_zyl_schweisstastePopCallback);
-  nex_zyl_messer.attachPush(nex_zyl_messerPushCallback);
-  nex_zyl_messer.attachPop(nex_zyl_messerPopCallback);
-  nex_but_reset_shorttime_counter.attachPush(
-      nex_but_reset_shorttime_counterPushCallback);
-  nex_but_reset_shorttime_counter.attachPop(
-      nex_but_reset_shorttime_counterPopCallback);
+  nex_zyl_wippenhebel.attachPush(nex_zyl_wippenhebel_push_callback);
+  nex_zyl_wippenhebel.attachPop(nex_zyl_wippenhebel_pop_callback);
+  nex_mot_band_unten.attachPush(nex_mot_band_unten_push_callback);
+  nex_mot_band_unten.attachPop(nex_mot_band_unten_pop_callback);
+  nex_zyl_schweisstaste.attachPush(nex_zyl_schweisstaste_push_callback);
+  nex_zyl_schweisstaste.attachPop(nex_zyl_schweisstaste_pop_callback);
+  nex_zyl_messer.attachPush(nex_zyl_messer_push_callback);
+  nex_zyl_messer.attachPop(nex_zyl_messer_pop_callback);
+  nex_but_reset_shorttime_counter.attachPush(nex_but_reset_shorttime_counter_push_callback);
+  nex_but_reset_shorttime_counter.attachPop(nex_but_reset_shorttime_counter_pop_callback);
 
   // ---------------------------------------------------------------------------
 
@@ -488,20 +433,18 @@ void send_to_nextion() {
   Serial2.write(0xff);
 }
 
-// void update_display_counter() {
-//   long new_value = counter.get_value(longtime_counter);
-//   Serial2.print("t0.txt=");
-//   Serial2.print("\"");
-//   Serial2.print(new_value);
-//   Serial2.print("\"");
-//   send_to_nextion();
-// }
-
 void show_info_field() {
   if (nex_current_page == 1) {
     Serial2.print("vis t4,1");
     send_to_nextion();
   }
+}
+
+String add_suffix_to_value(long value, String suffix) {
+  String value_string = String(value);
+  String space = " ";
+  String suffixed_string = value_string + space + suffix;
+  return suffixed_string;
 }
 
 void display_text_in_info_field(String text) {
@@ -520,8 +463,8 @@ void hide_info_field() {
   }
 }
 
-void clear_text_field(String textField) {
-  Serial2.print(textField);
+void clear_text_field(String text_field) {
+  Serial2.print(text_field);
   Serial2.print(".txt=");
   Serial2.print("\"");
   Serial2.print(""); // erase text
@@ -529,15 +472,15 @@ void clear_text_field(String textField) {
   send_to_nextion();
 }
 
-void display_value_in_field(int value, String valueField) {
-  Serial2.print(valueField);
+void display_value_in_field(int value, String value_field) {
+  Serial2.print(value_field);
   Serial2.print(".val=");
   Serial2.print(value);
   send_to_nextion();
 }
 
-void display_text_in_field(String text, String textField) {
-  Serial2.print(textField);
+void display_text_in_field(String text, String text_field) {
+  Serial2.print(text_field);
   Serial2.print(".txt=");
   Serial2.print("\"");
   Serial2.print(text);
@@ -575,8 +518,7 @@ void set_momentary_button_high_or_low(String button, bool state) {
 
 String get_main_cycle_display_string() {
   int current_step = state_controller.get_current_step();
-  String display_text_cycle_name =
-      main_cycle_steps[current_step]->get_display_text();
+  String display_text_cycle_name = main_cycle_steps[current_step]->get_display_text();
   return display_text_cycle_name;
 }
 
@@ -591,8 +533,7 @@ void update_main_cycle_name() {
 }
 
 void update_cycle_name() {
-  if (state_controller.is_in_step_mode() ||
-      state_controller.is_in_auto_mode()) {
+  if (state_controller.is_in_step_mode() || state_controller.is_in_auto_mode()) {
     update_main_cycle_name();
   }
 }
@@ -703,7 +644,7 @@ void display_loop_page_1_right_side() {
   if (zyl_schweisstaste.get_state() != nex_state_zyl_schweisstaste) {
     Serial2.print("click b3,");
     Serial2.print(zyl_schweisstaste.get_state()); // PUSH OR RELEASE
-                                                  // BUTTON
+        // BUTTON
     send_to_nextion();
     nex_state_zyl_schweisstaste = zyl_schweisstaste.get_state();
   }
@@ -718,108 +659,107 @@ void display_loop_page_1_right_side() {
 
 // DIPLAY LOOP PAGE 2 LEFT SIDE: -----------------------------------------------
 
-void display_loop_page_2_left_side() {
+void update_force_display() {
+  if (nex_prev_force_int != force_int) {
+    display_value_in_field(force_int, "h1");
+    String suffixed_value = add_suffix_to_value(force_int, "N");
+    display_text_in_field(suffixed_value, "t6");
+    nex_prev_force_int = force_int;
+  }
+}
+
+void update_pressure_display() {
+  Serial2.print("t8.txt=");
+  Serial2.print("\"");
+  Serial2.print(pressure_float, 1);
+  Serial2.print(" bar");
+  Serial2.print("\"");
+  send_to_nextion();
+  nex_prev_federdruck = pressure_float;
+}
+
+void update_startfuelldauer() {
   if (nex_prev_startfuelldauer != eeprom_counter.get_value(startfuelldauer)) {
-    send_to_nextion();
-    Serial2.print("t4.txt=");
-    Serial2.print("\"");
-    Serial2.print(eeprom_counter.get_value(startfuelldauer));
-    Serial2.print(" ms");
-    Serial2.print("\"");
-    send_to_nextion();
+    int value = eeprom_counter.get_value(startfuelldauer);
+    String display_string = add_suffix_to_value(value, "ms");
+    display_text_in_field(display_string, "t4");
     nex_prev_startfuelldauer = eeprom_counter.get_value(startfuelldauer);
   }
+}
 
-  if (nex_prev_federkraft_int != federkraft_int &&
-      millis() > nex_update_timer) {
-    // update force:
-    Serial2.print("h1.val=");
-    Serial2.print(federkraft_int);
-    send_to_nextion();
+void display_loop_page_2_left_side() {
 
-    Serial2.print("t6.txt=");
-    Serial2.print("\"");
-    Serial2.print(federkraft_int);
-    Serial2.print(" N");
-    Serial2.print("\"");
-    send_to_nextion();
-    nex_prev_federkraft_int = federkraft_int;
+  update_startfuelldauer();
 
-    // update pressure:
-    Serial2.print("t8.txt=");
-    Serial2.print("\"");
-    Serial2.print(federdruck_float, 1);
-    Serial2.print(" bar");
-    Serial2.print("\"");
-    send_to_nextion();
-    nex_prev_federdruck = federdruck_float;
-
-    nex_update_timer = millis() + 200;
+  if (nex_force_update_delay.delay_time_is_up(200)) {
+    update_force_display();
+    update_pressure_display();
   }
 }
 
 // DIPLAY LOOP PAGE 2 RIGHT SIDE: ----------------------------------------------
 
-void display_loop_page_2_right_side() {
+void update_upper_counter_value() {
   if (nex_prev_longtime_counter != eeprom_counter.get_value(longtime_counter)) {
-    Serial2.print("t10.txt=");
-    Serial2.print("\"");
-    Serial2.print(eeprom_counter.get_value(longtime_counter));
-    Serial2.print("\"");
-    send_to_nextion();
+    display_text_in_field(String(eeprom_counter.get_value(longtime_counter)), "t10");
     nex_prev_longtime_counter = eeprom_counter.get_value(longtime_counter);
   }
-  if (nex_prev_shorttime_counter !=
-      eeprom_counter.get_value(shorttime_counter)) {
-    Serial2.print("t12.txt=");
-    Serial2.print("\"");
-    Serial2.print(eeprom_counter.get_value(shorttime_counter));
-    Serial2.print("\"");
-    send_to_nextion();
+}
+
+void update_lower_counter_value() {
+  // UPDATE LOWER COUNTER:
+  if (nex_prev_shorttime_counter != eeprom_counter.get_value(shorttime_counter)) {
+    display_text_in_field(String(eeprom_counter.get_value(shorttime_counter)), "t12");
     nex_prev_shorttime_counter = eeprom_counter.get_value(shorttime_counter);
   }
-  if (reset_stopwatch_active) {
-    if (millis() - counter_reset_stopwatch > 5000) {
-      eeprom_counter.set_value(shorttime_counter, 0);
+}
+
+void reset_lower_counter_value() {
+  if (nex_reset_button_timeout.is_marked_activated()) {
+    if (nex_reset_button_timeout.has_timed_out()) {
       eeprom_counter.set_value(longtime_counter, 0);
     }
   }
 }
 
+void display_loop_page_2_right_side() {
+  update_upper_counter_value();
+  update_lower_counter_value();
+  reset_lower_counter_value();
+}
+
 // DIPLAY LOOP PAGE 3: ---------------------------------------------------------
 
+void update_number_of_cycles() {
+  if (nex_prev_cycles_in_a_row != eeprom_counter.get_value(cycles_in_a_row)) {
+    String text = String(eeprom_counter.get_value(cycles_in_a_row));
+    display_text_in_field(text, "t4");
+    nex_prev_cycles_in_a_row = eeprom_counter.get_value(cycles_in_a_row);
+  }
+}
+
+void update_cooldown_time() {
+  if (nex_prev_long_cooldown_time != eeprom_counter.get_value(long_cooldown_time)) {
+    long value = eeprom_counter.get_value(long_cooldown_time);
+    String text = add_suffix_to_value(value, "s");
+    display_text_in_field(text, "t5");
+    nex_prev_long_cooldown_time = eeprom_counter.get_value(long_cooldown_time);
+  }
+}
+
+void update_strap_feed_time() {
+  if (nex_prev_strap_eject_feed_time != eeprom_counter.get_value(strap_eject_feed_time)) {
+    long value = eeprom_counter.get_value(strap_eject_feed_time);
+    String text = add_suffix_to_value(value, "s");
+    display_text_in_field(text, "t7");
+    nex_prev_strap_eject_feed_time = eeprom_counter.get_value(strap_eject_feed_time);
+  }
+}
+
 void display_loop_page_3() {
-  if (nexPrevcycles_in_a_row != eeprom_counter.get_value(cycles_in_a_row)) {
-    send_to_nextion();
-    Serial2.print("t4.txt=");
-    Serial2.print("\"");
-    Serial2.print(eeprom_counter.get_value(cycles_in_a_row));
-    Serial2.print("\"");
-    send_to_nextion();
-    nex_prev_startfuelldauer = eeprom_counter.get_value(cycles_in_a_row);
-  }
-
-  if (nexPrevlong_cooldown_time != eeprom_counter.get_value(long_cooldown_time)) {
-    Serial2.print("t5.txt=");
-    Serial2.print("\"");
-    // Serial2.print("222");
-    Serial2.print(eeprom_counter.get_value(long_cooldown_time));
-    Serial2.print(" s");
-    Serial2.print("\"");
-    send_to_nextion();
-    nex_prev_longtime_counter = eeprom_counter.get_value(long_cooldown_time);
-  }
-
-  if (nexPrevstrap_eject_feed_time !=
-      eeprom_counter.get_value(strap_eject_feed_time)) {
-    Serial2.print("t7.txt=");
-    Serial2.print("\"");
-    Serial2.print(eeprom_counter.get_value(strap_eject_feed_time));
-    Serial2.print(" s");
-    Serial2.print("\"");
-    send_to_nextion();
-    nex_prev_longtime_counter = eeprom_counter.get_value(strap_eject_feed_time);
-  }
+  update_number_of_cycles();
+  update_cooldown_time();
+  update_strap_feed_time();
 }
 
 // NEXTION MAIN LOOP: ----------------------------------------------------------
@@ -845,117 +785,111 @@ void nextion_loop() {
     display_loop_page_3();
   }
 
-} // END OF NEXTION LOOP
+} // END OF NEXTION MAIN LOOP
 
-void read_n_toggle() {
+// PROCESS PRESSURE SENSOR -----------------------------------------------------
 
-  // IN AUTO MODE, MACHINE RUNS FROM STEP TO STEP AUTOMATICALLY:
-  if (!step_mode) //=AUTO MODE
-  {
-    clearance_next_step = true;
-  }
-
-  // IN STEP MODE, MACHINE STOPS AFTER EVERY COMPLETED CYCLYE:
-  if (step_mode && !clearance_next_step) {
-    machine_running = false;
-  }
-
-  // START TEST RIG:
-  if (digitalRead(start_button)) {
-    machine_running = true;
-    clearance_next_step = true;
-  }
-
-  // STOP TEST_RIG:
-  if (digitalRead(stop_button)) {
-    machine_running = false;
-  }
-
-  // BANDSENSOREN ABFRAGEN:
-
-  if (digitalRead(bandsensor_oben) && digitalRead(bandsensor_unten)) {
-    band_vorhanden = true;
-    error_blink = false;
-  } else {
-    band_vorhanden = false;
-    error_blink = true;
-    clearance_next_step = false;
-    machine_running = false;
-  }
-
-  // START- UND ENDPOSITIONSSCHALTER ABFRAGEN:
-  startposition_erreicht = digitalRead(taster_startposition);
-  endposition_erreicht = digitalRead(taster_endposition);
-
-  //*****************************************************************************
-  // READ PRESSURE SENSOR AND CALCULATE PRESSURE AND AIR-SPRING-FORCE:
+float get_pressure_from_sensor() {
   // DRUCKSENSOR 0-10V => 0-12bar
   // CONTROLLINO ANALOG INPUT VALUE 0-1023, 30mV per digit (controlino.biz)
   // 10V   => analogRead 333.3 (10V/30mV)
   // 12bar => anlaogRead 333.3
   // 1bar  => analogRead 27.778
+  return analogRead(drucksensor) / 27.778; //[bar]
+}
 
-  federdruck_float = analogRead(drucksensor) / 27.778; //[bar]
+float smoothe_measurement(float pressure_float) {
+  static float pressure_float_smoothed;
+  pressure_float_smoothed = ((pressure_float_smoothed * 4 + pressure_float) / 5);
+  return pressure_float_smoothed;
+}
 
-  // SMOOTH VALUES:
-  federdruck_smoothed = ((federdruck_smoothed * 4 + federdruck_float) / 5);
-  // CONVERT TO INT AND [mbar]:
-  federdruck_mbar_int = federdruck_smoothed * 1000; //[mbar]
-
-  // CALM FUNCTION:
+float calm_measurement(float pressure_float) {
   // To prevent flickering, the pressure value will only be updated
-  // if there's a higher or lower value five times in a row
+  // if there's a higher or lower value five times in a row.
+  // A positive calmcounter indicates rising pressure.
+  // A negative calmcounter indicates dropping pressure.
 
-  if (federdruck_mbar_int > federdruck_beruhigt) {
+  static float calmcounter;
+  static float pressure_sum;
+  static float pressure_calmed;
+  static float prev_pressure_calmed;
+  static float min_difference = 0.05; // [bar]
+
+  // Pressure seems to rise:
+  if (pressure_float > pressure_calmed) {
     if (calmcounter >= 0) {
       calmcounter++;
-      calmcountersum = calmcountersum + federdruck_mbar_int;
+      pressure_sum += pressure_float;
     }
-    if (calmcounter < 0) // RESET CALMCOUNTER
+    if (calmcounter < 0) // Pressure seemed to drop last time, reset calmcounter
     {
       calmcounter = 0;
-      calmcountersum = 0;
+      pressure_sum = 0;
     }
   }
-  if (federdruck_mbar_int < federdruck_beruhigt) {
+  // Pressure seems to fall:
+  if (pressure_float < pressure_calmed) {
     if (calmcounter <= 0) {
       calmcounter--;
-      calmcountersum = calmcountersum + federdruck_mbar_int;
+      pressure_sum += pressure_float;
     }
-    if (calmcounter > 0) // RESET CALMCOUNTER
+    if (calmcounter > 0) // Pressure seemed to rise last time, reset calmcounter
     {
       calmcounter = 0;
-      calmcountersum = 0;
+      pressure_sum = 0;
     }
   }
-  if (abs(calmcounter) == 5) // abs()=> Absolutwert
+  if (fabs(calmcounter) >= 5) //
   {
-    // update value only if there is a significant difference to the previous
+    // Update value only if there is a significant difference to the previous
     // value:
-    if (abs(calmcountersum / abs(calmcounter) - prev_federdruck_beruhigt) >
-        50) {
-      federdruck_beruhigt = calmcountersum / abs(calmcounter);
-      prev_federdruck_beruhigt = federdruck_beruhigt;
+    if (fabs(pressure_sum / fabs(calmcounter) - prev_pressure_calmed) > min_difference) {
+      pressure_calmed = pressure_sum / fabs(calmcounter);
+      prev_pressure_calmed = pressure_calmed;
     }
     calmcounter = 0;
-    calmcountersum = 0;
+    pressure_sum = 0;
   }
+  return pressure_calmed;
+}
 
-  // GO BACK TO FLOAT TO GET A "X.X bar" PRINT ON THE DISPLAY:
-
-  federdruck_float = federdruck_beruhigt;
-  federdruck_float = federdruck_float / 1000; //[bar]
+int convert_pressure_to_force(float pressure) {
 
   // CALCULATE FORCE:
-  federkraft_int =
-      federdruck_float *
-      1472.6; // 1bar  => 1472.6N (Dauertest BXT 3-32 Zylinderkraft.xlsx)
+  int force = pressure * 1472.6; // 1bar  => 1472.6N (Dauertest BXT 3-32 Zylinderkraft.xlsx)
 
   // SET LAST DIGIT ZERO
-  federkraft_int = federkraft_int / 10;
-  federkraft_int = federkraft_int * 10;
+  force = force / 10;
+  force = force * 10;
 
-} // END OF READ_N_TOGGLE
+  return force;
+}
+
+void read_and_process_pressure() {
+
+  pressure_float = get_pressure_from_sensor(); //[bar]
+  pressure_float = smoothe_measurement(pressure_float); //[bar]
+  pressure_float = calm_measurement(pressure_float);
+
+  pressure_float = pressure_float; //[bar]
+  force_int = convert_pressure_to_force(pressure_float); // [N]
+}
+
+void monitor_strap_detectors() {
+
+  // BANDSENSOREN ABFRAGEN:
+  if (digitalRead(bandsensor_oben) && digitalRead(bandsensor_unten)) {
+    band_vorhanden = true;
+  } else {
+    band_vorhanden = false;
+    state_controller.set_machine_stop();
+  }
+
+  // START- UND ENDPOSITIONSSCHALTER ABFRAGEN:
+  startposition_erreicht = digitalRead(taster_startposition);
+  endposition_erreicht = digitalRead(taster_endposition);
+}
 
 // CREATE CYCLE STEP CLASSES ***************************************************
 // -----------------------------------------------------------------------------
@@ -976,9 +910,7 @@ class Vorschieben : public Cycle_step {
   String get_display_text() { return "VORSCHIEBEN"; }
   long feed_time;
 
-  void do_initial_stuff() {
-    feed_time = eeprom_counter.get_value(strap_eject_feed_time) * 1000;
-  };
+  void do_initial_stuff() { feed_time = eeprom_counter.get_value(strap_eject_feed_time) * 1000; };
   void do_loop_stuff() {
     zyl_spanntaste.stroke(feed_time, 300);
     if (zyl_spanntaste.stroke_completed()) {
@@ -1018,17 +950,14 @@ class Startdruck : public Cycle_step {
   String get_display_text() { return "STARTDRUCK"; }
 
   void do_initial_stuff() {
-    startfuelltimer = millis();
-    startfuellung_running = true;
+    cycle_step_delay.set_unstarted();
     zyl_feder_zuluft.set(1); // 1=füllen 0=geschlossen
     zyl_feder_abluft.set(1); // 1=geschlossen 0=entlüften
   };
 
   void do_loop_stuff() {
-    if ((millis() - startfuelltimer) >
-        eeprom_counter.get_value(startfuelldauer)) {
+    if (cycle_step_delay.delay_time_is_up(eeprom_counter.get_value(startfuelldauer))) {
       zyl_feder_zuluft.set(0); // 1=füllen 0=geschlossen
-      startfuellung_running = false;
       set_loop_completed();
     };
   };
@@ -1076,7 +1005,7 @@ class Abkuehlen : public Cycle_step {
     zyl_feder_abluft.set(0); // 1=geschlossen 0=entlüften
   };
   void do_loop_stuff() {
-    if (federdruck_float < 0.1) // warten bis der Druck ist abgebaut
+    if (pressure_float < 0.1) // warten bis der Druck ist abgebaut
     {
       if (cycle_step_delay.delay_time_is_up(4000)) { // Restluft kann entweichen
         set_loop_completed();
@@ -1122,9 +1051,9 @@ class Zurueckfahren : public Cycle_step {
   };
   void do_loop_stuff() {
     if (startposition_erreicht) {
-      zyl_feder_zuluft.set(0);    // 1=füllen 0=geschlossen
-      zyl_feder_abluft.set(0);    // 1=geschlossen 0=entlüften
-      if (federdruck_float < 0.1) // warten bis der Druck abgebaut ist
+      zyl_feder_zuluft.set(0); // 1=füllen 0=geschlossen
+      zyl_feder_abluft.set(0); // 1=geschlossen 0=entlüften
+      if (pressure_float < 0.1) // warten bis der Druck abgebaut ist
       {
         if (cycle_step_delay.delay_time_is_up(500)) {
           eeprom_counter.count_one_up(shorttime_counter);
@@ -1162,22 +1091,17 @@ class Pause : public Cycle_step {
 // -----------------------------------------------------------------------------
 
 void setup() {
-  eeprom_counter.setup(eepromMinAddress, eepromMaxAddress,
-                       numberOfEepromValues);
+  eeprom_counter.setup(eeprom_min_address, eeprom_max_address, number_of_eeprom_values);
   Serial.begin(115200); // start serial connection
 
   nextion_setup();
 
-  pinMode(stop_button, INPUT);
-  pinMode(start_button, INPUT);
   pinMode(bandsensor_oben, INPUT);
   pinMode(bandsensor_unten, INPUT);
   pinMode(taster_startposition, INPUT);
   pinMode(taster_endposition, INPUT);
   pinMode(drucksensor, INPUT);
 
-  pinMode(green_light, OUTPUT);
-  pinMode(red_light, OUTPUT);
   delay(2000);
 
   //------------------------------------------------
@@ -1224,8 +1148,7 @@ void run_step_or_auto_mode() {
     }
     // IF MACHINE STATE IS RUNNING IN AUTO MODE,
     // THE "MACHINE STOPPED ERROR TIMEOUT" RESETS AFTER EVERY STEP:
-    if (state_controller.is_in_auto_mode() &&
-        state_controller.machine_is_running()) {
+    if (state_controller.is_in_auto_mode() && state_controller.machine_is_running()) {
       // machine_stopped_error_timeout.reset_time();
     }
   }
@@ -1242,10 +1165,14 @@ void run_step_or_auto_mode() {
 }
 
 void loop() {
-  read_n_toggle();
-  nextion_loop();
+
+  read_and_process_pressure();
 
   // UPDATE DISPLAY:
+  nextion_loop();
+
+  // CHECK IF STRAP IS AVAILABLE
+  monitor_strap_detectors();
 
   // MONITOR EMERGENCY SIGNAL:
   // monitor_emergency_signal();
@@ -1257,15 +1184,13 @@ void loop() {
   }
 
   // MONITOR ERRORS ONLY WHEN RIG IS RUNNING IN AUTO MODE:
-  if (state_controller.machine_is_running() &&
-      state_controller.is_in_auto_mode()) {
+  if (state_controller.machine_is_running() && state_controller.is_in_auto_mode()) {
     // monitor_error_timeouts();
     // monitor_temperature_error();
   }
 
   // RUN STEP OR AUTO MODE:
-  if (state_controller.is_in_step_mode() ||
-      state_controller.is_in_auto_mode()) {
+  if (state_controller.is_in_step_mode() || state_controller.is_in_auto_mode()) {
     run_step_or_auto_mode();
   }
 

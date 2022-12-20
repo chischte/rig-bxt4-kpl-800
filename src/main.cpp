@@ -1,33 +1,31 @@
 
 /*
  * *****************************************************************************
- * BXT_BX4_KPL
+ * BXT4_KPL
  * *****************************************************************************
  * Program to control a test rig
  * *****************************************************************************
  * Michael Wettstein
- * November 2022, Zürich
+ * Dezember 2022, Zürich
  * *****************************************************************************
  * TODO:
  * Reset button soll auch Zylinder abstellen
- * Restpausenzeit direkt von insomnia library abfragen.
  * Bug beheben auf Page 2 wird die bandvorschubdauer angezeigt oben rechts...
  * ...beim Wechsel von Seite 3 auf 2
  * *****************************************************************************
  */
 
-// #include <Arduino.h>
 #include <ArduinoSTL.h> //       https://github.com/mike-matera/ArduinoSTL
-#include <Controllino.h> //       PIO Controllino Library
-#include <Cylinder.h> //       https://github.com/chischte/cylinder-library
-#include <Debounce.h> //        https://github.com/chischte/debounce-library
-#include <EEPROM_Counter.h> //       https://github.com/chischte/eeprom-counter-library
-#include <Insomnia.h> //             https://github.com/chischte/insomnia-delay-library
-#include <Nextion.h> //              PIO Nextion library
-#include <SD.h> //              PIO Adafruit SD library
+#include <Controllino.h> //      PIO Controllino Library
+#include <Cylinder.h> //         https://github.com/chischte/cylinder-library
+#include <Debounce.h> //         https://github.com/chischte/debounce-library
+#include <EEPROM_Counter.h> //   https://github.com/chischte/eeprom-counter-library
+#include <Insomnia.h> //         https://github.com/chischte/insomnia-delay-library
+#include <Nextion.h> //          PIO Nextion library
+#include <SD.h> //               PIO Adafruit SD library
 
-#include <cycle_step.h> //     blueprint of a cycle step
-#include <state_controller.h> //     keeps track of machine states
+#include <cycle_step.h> //       blueprint of a cycle step
+#include <state_controller.h> // keeps track of machine states
 
 // PRE-SETUP SECTION / PIN LAYOUT **********************************************
 
@@ -148,7 +146,7 @@ unsigned long button_push_stopwatch;
 // NEXTION OBJECTS -------------------------------------------------------------
 
 // PAGE 0:
-NexPage nex_page0 = NexPage(0, 0, "page0");
+NexPage nex_page_0 = NexPage(0, 0, "page_0");
 
 // PAGE 1 - LEFT SIDE:
 NexPage nex_page_1 = NexPage(1, 0, "page1");
@@ -192,7 +190,7 @@ char buffer[100] = {0}; // This is needed only if you are going to receive a
 
 NexTouch *nex_listen_list[] = {
     // PAGES
-    &nex_page0, &nex_page_1, &nex_page_2, &nex_page_3,
+    &nex_page_0, &nex_page_1, &nex_page_2, &nex_page_3,
     // PAGE 0 1 2:
     &nex_but_reset_shorttime_counter, &nex_but_stepback, &nex_but_stepnxt, &nex_but_reset_cycle, &nex_but_slider_1_left,
     &nex_but_slider_1_right, &nex_switch_play_pause, &nex_switch_mode, &nex_zyl_messer, &nex_zyl_klemmblock,
@@ -262,11 +260,17 @@ void nex_zyl_wippenhebel_push_callback(void *ptr) { zyl_wippenhebel.set(1); }
 void nex_zyl_wippenhebel_pop_callback(void *ptr) { zyl_wippenhebel.set(0); }
 
 void nex_mot_band_unten_push_callback(void *ptr) { zyl_spanntaste.set(1); }
+
 void nex_mot_band_unten_pop_callback(void *ptr) { zyl_spanntaste.set(0); }
+
 void nex_zyl_schweisstaste_push_callback(void *ptr) { zyl_schweisstaste.set(1); }
+
 void nex_zyl_schweisstaste_pop_callback(void *ptr) { zyl_schweisstaste.set(0); }
+
 void nex_zyl_messer_push_callback(void *ptr) { zyl_block_messer.set(1); }
+
 void nex_zyl_messer_pop_callback(void *ptr) { zyl_block_messer.set(0); }
+
 void nex_einschaltventil_push_callback(void *ptr) {
   einschaltventil.toggle();
   nex_state_einschaltventil = !nex_state_einschaltventil;
@@ -320,11 +324,12 @@ void nex_button_2_left_push_callback(void *ptr) { decrease_slider_value(long_coo
 void nex_button_2_right_push_callback(void *ptr) { increase_slider_value(long_cooldown_time, 600, 10); }
 
 void nex_button_3_left_push_callback(void *ptr) { decrease_slider_value(strap_eject_feed_time, 0, 1); }
+
 void nex_button_3_right_push_callback(void *ptr) { increase_slider_value(strap_eject_feed_time, 20, 1); }
 
 // TOUCH EVENT FUNCTIONS PAGE CHANGES ------------------------------------------
 
-void nex_page0_push_callback(void *ptr) { nex_current_page = 0; }
+void nex_page_0_push_callback(void *ptr) { nex_current_page = 0; }
 
 void nex_page_1_push_callback(void *ptr) {
   nex_current_page = 1;
@@ -372,7 +377,7 @@ void nextion_setup() { // START NEXTION SETUP
   // REGISTER EVENT CALLBACK FUNCTIONS -----------------------------------------
 
   // PAGE 0 1 2:
-  nex_page0.attachPush(nex_page0_push_callback);
+  nex_page_0.attachPush(nex_page_0_push_callback);
   nex_page_1.attachPush(nex_page_1_push_callback);
   nex_page_2.attachPush(nex_page_2_push_callback);
   nex_page_3.attachPush(nex_page_3_push_callback);
@@ -517,14 +522,14 @@ void update_cycle_name() {
   }
 }
 
-void update_switchstate_play_pause(){
+void update_switchstate_play_pause() {
   if (nex_state_machine_running != machine_running) {
     toggle_ds_switch("bt0");
     nex_state_machine_running = !nex_state_machine_running;
   }
 }
 
-void update_switchstate_step_auto(){
+void update_switchstate_step_auto() {
   // UPDATE SWITCHSTATE "STEP"/"AUTO"-MODE
   if (step_mode != nex_prev_step_mode) {
     toggle_ds_switch("bt1");
@@ -590,25 +595,25 @@ void display_loop_page_1_right_side() {
   }
 
   if (zyl_wippenhebel.get_state() != nex_state_zyl_wippenhebel) {
-    bool state =zyl_wippenhebel.get_state();
-    set_momentary_button_high_or_low("b5",state);
+    bool state = zyl_wippenhebel.get_state();
+    set_momentary_button_high_or_low("b5", state);
     nex_state_zyl_wippenhebel = zyl_wippenhebel.get_state();
   }
 
   if (zyl_spanntaste.get_state() != nex_state_zyl_spanntaste) {
-    bool state =zyl_spanntaste.get_state();
-    set_momentary_button_high_or_low("b4",state);
+    bool state = zyl_spanntaste.get_state();
+    set_momentary_button_high_or_low("b4", state);
     nex_state_zyl_spanntaste = zyl_spanntaste.get_state();
   }
 
   if (zyl_block_messer.get_state() != nex_state_zyl_messer) {
-    bool state =zyl_block_messer.get_state();
-    set_momentary_button_high_or_low("b6",state);
+    bool state = zyl_block_messer.get_state();
+    set_momentary_button_high_or_low("b6", state);
     nex_state_zyl_messer = zyl_block_messer.get_state();
   }
   if (zyl_schweisstaste.get_state() != nex_state_zyl_schweisstaste) {
-    bool state =zyl_schweisstaste.get_state();
-    set_momentary_button_high_or_low("b3",state);
+    bool state = zyl_schweisstaste.get_state();
+    set_momentary_button_high_or_low("b3", state);
     nex_state_zyl_schweisstaste = zyl_schweisstaste.get_state();
   }
 

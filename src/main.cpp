@@ -202,6 +202,7 @@ NexTouch *nex_listen_list[] = {
     // END OF DECLARATION
     NULL // String terminated
 };
+
 // NEXTION TOUCH EVENT FUNCTIONS -----------------------------------------------
 
 // TOUCH EVENT FUNCTIONS PAGE 1 - LEFT SIDE ------------------------------------
@@ -371,22 +372,19 @@ void nex_page_3_push_callback(void *ptr) {
 
 // NEXTION SETUP ***************************************************************
 
-void nextion_setup() { // START NEXTION SETUP
-  Serial2.begin(9600); // Start serial comunication at baud=9600
+void nextion_setup() {
+  Serial2.begin(9600);
 
   // REGISTER EVENT CALLBACK FUNCTIONS -----------------------------------------
 
-  // PAGE 0 1 2:
+  // PAGE 0:
   nex_page_0.attachPush(nex_page_0_push_callback);
+  // PAGE 1:
   nex_page_1.attachPush(nex_page_1_push_callback);
-  nex_page_2.attachPush(nex_page_2_push_callback);
-  nex_page_3.attachPush(nex_page_3_push_callback);
   nex_but_stepback.attachPush(nex_but_stepback_push_callback);
   nex_but_stepnxt.attachPush(nex_but_stepnxt_push_callback);
   nex_zyl_klemmblock.attachPush(nex_zyl_klemmblock_push_callback);
   nex_but_reset_cycle.attachPush(nex_but_reset_cycle_push_callback);
-  nex_but_slider_1_left.attachPush(nex_but_slider_1_left_push_callback);
-  nex_but_slider_1_right.attachPush(nex_but_slider_1_right_push_callback);
   nex_but_stepback.attachPush(nex_but_stepback_push_callback);
   nex_but_stepnxt.attachPush(nex_but_stepnxt_push_callback);
   nex_switch_mode.attachPush(nex_switch_mode_push_callback);
@@ -395,15 +393,6 @@ void nextion_setup() { // START NEXTION SETUP
   nex_zyl_800_zuluft.attachPush(nex_zyl_800_zuluft_push_callback);
   nex_zyl_800_abluft.attachPush(nex_zyl_800_abluft_push_callback);
   nex_einschaltventil.attachPush(nex_einschaltventil_push_callback);
-  // PAGE 3:
-  nex_button_1_left.attachPush(nex_button_1_left_push_callback);
-  nex_button_1_right.attachPush(nex_button_1_right_push_callback);
-  nex_button_2_left.attachPush(nex_button_2_left_push_callback);
-  nex_button_2_right.attachPush(nex_button_2_right_push_callback);
-  nex_button_3_left.attachPush(nex_button_3_left_push_callback);
-  nex_button_3_right.attachPush(nex_button_3_right_push_callback);
-
-  //*****PUSH+POP:
   nex_zyl_wippenhebel.attachPush(nex_zyl_wippenhebel_push_callback);
   nex_zyl_wippenhebel.attachPop(nex_zyl_wippenhebel_pop_callback);
   nex_mot_band_unten.attachPush(nex_mot_band_unten_push_callback);
@@ -412,13 +401,25 @@ void nextion_setup() { // START NEXTION SETUP
   nex_zyl_schweisstaste.attachPop(nex_zyl_schweisstaste_pop_callback);
   nex_zyl_messer.attachPush(nex_zyl_messer_push_callback);
   nex_zyl_messer.attachPop(nex_zyl_messer_pop_callback);
+  // PAGE 2:
+  nex_page_2.attachPush(nex_page_2_push_callback);
+  nex_but_slider_1_left.attachPush(nex_but_slider_1_left_push_callback);
+  nex_but_slider_1_right.attachPush(nex_but_slider_1_right_push_callback);
   nex_but_reset_shorttime_counter.attachPush(nex_but_reset_shorttime_counter_push_callback);
   nex_but_reset_shorttime_counter.attachPop(nex_but_reset_shorttime_counter_pop_callback);
+  // PAGE 3:
+  nex_page_3.attachPush(nex_page_3_push_callback);
+  nex_button_1_left.attachPush(nex_button_1_left_push_callback);
+  nex_button_1_right.attachPush(nex_button_1_right_push_callback);
+  nex_button_2_left.attachPush(nex_button_2_left_push_callback);
+  nex_button_2_right.attachPush(nex_button_2_right_push_callback);
+  nex_button_3_left.attachPush(nex_button_3_left_push_callback);
+  nex_button_3_right.attachPush(nex_button_3_right_push_callback);
 
   // ---------------------------------------------------------------------------
 
-  delay(3000);
-  sendCommand("page 1"); // SWITCH NEXTION TO PAGE X
+  delay(3000); // Show start screen
+  sendCommand("page 1");
   send_to_nextion();
 
 } // END OF NEXTION SETUP
@@ -1064,7 +1065,8 @@ class Pause : public Cycle_step {
 // SETUP LOOP ------------------------------------------------------------------
 void setup() {
   eeprom_counter.setup(eeprom_min_address, eeprom_max_address, number_of_eeprom_values);
-  Serial.begin(115200); // start serial connection
+
+  Serial.begin(115200);
 
   nextion_setup();
 
@@ -1089,11 +1091,11 @@ void setup() {
   main_cycle_steps.push_back(new Pause);
   //------------------------------------------------
   // CONFIGURE THE STATE CONTROLLER:
-  int no_of_main_cycle_steps = main_cycle_steps.size();
-  state_controller.set_no_of_steps(no_of_main_cycle_steps);
+  state_controller.set_no_of_steps(main_cycle_steps.size());
   //------------------------------------------------
 
   einschaltventil.set(1); //ÖFFNET DAS HAUPTLUFTVENTIL
+
   zyl_tool_niederhalter.set(1);
 
   Serial.println("EXIT SETUP");
@@ -1140,6 +1142,21 @@ void run_auto_mode() {
   // }
 }
 
+// RESET -----------------------------------------------------------------------
+void run_reset() { // reset_machine();
+  // stroke_wippenhebel();
+  // Reset zylinders
+
+  state_controller.set_reset_mode(0);
+
+  if (state_controller.run_after_reset_is_active()) {
+    state_controller.set_auto_mode();
+    state_controller.set_machine_running();
+  } else {
+    state_controller.set_step_mode();
+  }
+}
+
 // MAIN LOOP -------------------------------------------------------------------
 void loop() {
 
@@ -1158,7 +1175,7 @@ void loop() {
     // bandsensor_timeout.reset_time();
   }
 
-  // MONITOR TIEMOUT ONLY WHEN RIG IS RUNNING IN AUTO MODE:
+  // MONITOR TIMEMOUT ONLY WHEN RIG IS RUNNING IN AUTO MODE:
   if (state_controller.machine_is_running() && state_controller.is_in_auto_mode()) {
     // monitor_error_timeouts();
   }
@@ -1174,16 +1191,7 @@ void loop() {
 
   // RUN RESET (ONCE):
   if (state_controller.reset_mode_is_active()) {
-    // reset_machine();
-    // stroke_wippenhebel();
-    state_controller.set_reset_mode(0);
-
-    if (state_controller.run_after_reset_is_active()) {
-      state_controller.set_auto_mode();
-      state_controller.set_machine_running();
-    } else {
-      state_controller.set_step_mode();
-    }
+    run_reset();
   }
 }
 

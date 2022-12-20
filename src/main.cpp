@@ -16,7 +16,6 @@
  * Kommentare und Anmerkungen an Style Guide anpassen und vereinheitlichen
  * Compiler Warnungen anschauen
  * Reset button soll auch Zylinder abstellen
- * Insomnia library timeout für main cycle verwenden
  * Restpausenzeit direkt von insomnia library abfragen.
  * Bug beheben auf Page 2 wird die bandvorschubdauer angezeigt oben rechts...
  * ...beim Wechsel von Seite 3 auf 2
@@ -27,6 +26,7 @@
 #include <ArduinoSTL.h> //       https://github.com/mike-matera/ArduinoSTL
 #include <Controllino.h> //       PIO Controllino Library
 #include <Cylinder.h> //       https://github.com/chischte/cylinder-library
+#include <Debounce.h> //        https://github.com/chischte/debounce-library
 #include <EEPROM_Counter.h> //       https://github.com/chischte/eeprom-counter-library
 #include <Insomnia.h> //             https://github.com/chischte/insomnia-delay-library
 #include <Nextion.h> //              PIO Nextion library
@@ -39,25 +39,26 @@
 
 State_controller state_controller;
 
-// KNOBS AND POTENTIOMETERS:
+// INPUT PINS / SENSORS:
 
-// SENSORS:
-#define bandsensor_oben CONTROLLINO_A0
-#define bandsensor_unten CONTROLLINO_A1
-#define taster_startposition CONTROLLINO_A2
-#define taster_endposition CONTROLLINO_A3
-#define drucksensor CONTROLLINO_A7 // 0-10V = 0-12barg
+const byte DRUCKSENSOR = CONTROLLINO_A7; // 0-10V = 0-12barg
+Debounce bandsensor_oben(CONTROLLINO_A0);
+Debounce bandsensor_unten(CONTROLLINO_A1);
+Debounce taster_startposition(CONTROLLINO_A2);
+Debounce taster_endposition(CONTROLLINO_A3);
 
-// VALVES / MOTORS:
+// OUTPUT PINS / VALVES / MOTORS / RELAYS:
 Cylinder einschaltventil(CONTROLLINO_D7);
-Cylinder zyl_feder_abluft(CONTROLLINO_D1);
-Cylinder zyl_feder_zuluft(CONTROLLINO_D0);
+Cylinder zyl_800_abluft(CONTROLLINO_D1);
+Cylinder zyl_800_zuluft(CONTROLLINO_D0);
 Cylinder zyl_klemmblock(CONTROLLINO_D2);
 Cylinder zyl_wippenhebel(CONTROLLINO_D5);
 Cylinder zyl_spanntaste(CONTROLLINO_D3);
-Cylinder zyl_messer(CONTROLLINO_D6);
 Cylinder zyl_schweisstaste(CONTROLLINO_D4);
-Cylinder zyl_loescherblink(CONTROLLINO_D11);
+Cylinder zyl_tool_niederhalter(CONTROLLINO_D9);
+Cylinder zyl_block_messer(CONTROLLINO_D6);
+Cylinder zyl_block_klemmrad(CONTROLLINO_D8);
+Cylinder zyl_block_foerdermotor(CONTROLLINO_R5);
 
 Insomnia cycle_step_delay;
 Insomnia nex_force_update_delay;
@@ -128,8 +129,8 @@ int nex_current_page;
 // prevent screen flickering.
 
 bool nex_state_einschaltventil;
-bool nex_state_zyl_feder_zuluft;
-bool nex_state_zyl_feder_abluft;
+bool nex_state_zyl_800_zuluft;
+bool nex_state_zyl_800_abluft;
 bool nex_state_zyl_klemmblock;
 bool nex_state_zyl_wippenhebel;
 bool nex_state_zyl_spanntaste;
@@ -166,8 +167,8 @@ NexDSButton nex_switch_play_pause = NexDSButton(1, 2, "bt0");
 NexDSButton nex_switch_mode = NexDSButton(1, 4, "bt1");
 
 // PAGE 1 - RIGHT SIDE
-NexDSButton nex_zyl_feder_zuluft = NexDSButton(1, 14, "bt5");
-NexDSButton nex_zyl_feder_abluft = NexDSButton(1, 13, "bt4");
+NexDSButton nex_zyl_800_zuluft = NexDSButton(1, 14, "bt5");
+NexDSButton nex_zyl_800_abluft = NexDSButton(1, 13, "bt4");
 NexDSButton nex_zyl_klemmblock = NexDSButton(1, 12, "bt3");
 NexButton nex_zyl_wippenhebel = NexButton(1, 11, "b5");
 NexButton nex_mot_band_unten = NexButton(1, 10, "b4");
@@ -203,7 +204,7 @@ NexTouch *nex_listen_list[] = {
     // PAGE 0 1 2:
     &nex_but_reset_shorttime_counter, &nex_but_stepback, &nex_but_stepnxt, &nex_but_reset_cycle, &nex_but_slider_1_left,
     &nex_but_slider_1_right, &nex_switch_play_pause, &nex_switch_mode, &nex_zyl_messer, &nex_zyl_klemmblock,
-    &nex_zyl_feder_zuluft, &nex_zyl_feder_abluft, &nex_zyl_wippenhebel, &nex_mot_band_unten, &nex_zyl_schweisstaste,
+    &nex_zyl_800_zuluft, &nex_zyl_800_abluft, &nex_zyl_wippenhebel, &nex_mot_band_unten, &nex_zyl_schweisstaste,
     &nex_einschaltventil,
     // PAGE 3:
     &nex_button_1_left, &nex_button_1_right, &nex_button_2_left, &nex_button_2_right, &nex_button_3_left,
@@ -249,14 +250,14 @@ void nex_but_reset_cycle_push_callback(void *ptr) {
 
 // TOUCH EVENT FUNCTIONS PAGE 1 - RIGHT SIDE -----------------------------------
 
-void nex_zyl_feder_zuluft_push_callback(void *ptr) {
-  zyl_feder_zuluft.toggle();
-  nex_state_zyl_feder_zuluft = !nex_state_zyl_feder_zuluft;
+void nex_zyl_800_zuluft_push_callback(void *ptr) {
+  zyl_800_zuluft.toggle();
+  nex_state_zyl_800_zuluft = !nex_state_zyl_800_zuluft;
 }
 
-void nex_zyl_feder_abluft_push_callback(void *ptr) {
-  zyl_feder_abluft.toggle();
-  nex_state_zyl_feder_abluft = !nex_state_zyl_feder_abluft;
+void nex_zyl_800_abluft_push_callback(void *ptr) {
+  zyl_800_abluft.toggle();
+  nex_state_zyl_800_abluft = !nex_state_zyl_800_abluft;
 }
 
 void nex_zyl_klemmblock_push_callback(void *ptr) {
@@ -272,8 +273,8 @@ void nex_mot_band_unten_push_callback(void *ptr) { zyl_spanntaste.set(1); }
 void nex_mot_band_unten_pop_callback(void *ptr) { zyl_spanntaste.set(0); }
 void nex_zyl_schweisstaste_push_callback(void *ptr) { zyl_schweisstaste.set(1); }
 void nex_zyl_schweisstaste_pop_callback(void *ptr) { zyl_schweisstaste.set(0); }
-void nex_zyl_messer_push_callback(void *ptr) { zyl_messer.set(1); }
-void nex_zyl_messer_pop_callback(void *ptr) { zyl_messer.set(0); }
+void nex_zyl_messer_push_callback(void *ptr) { zyl_block_messer.set(1); }
+void nex_zyl_messer_pop_callback(void *ptr) { zyl_block_messer.set(0); }
 void nex_einschaltventil_push_callback(void *ptr) {
   einschaltventil.toggle();
   nex_state_einschaltventil = !nex_state_einschaltventil;
@@ -340,8 +341,8 @@ void nex_page_1_push_callback(void *ptr) {
   nex_prev_cycle_step = 1;
   nex_prev_step_mode = true;
 
-  nex_state_zyl_feder_zuluft = 0;
-  nex_state_zyl_feder_abluft = 1; // INVERTED VALVE LOGIC
+  nex_state_zyl_800_zuluft = 0;
+  nex_state_zyl_800_abluft = 1; // INVERTED VALVE LOGIC
   nex_state_zyl_klemmblock = 0;
   nex_state_zyl_wippenhebel = 0;
   nex_state_zyl_spanntaste = 0;
@@ -394,8 +395,8 @@ void nextion_setup() { // START NEXTION SETUP
   nex_switch_mode.attachPush(nex_switch_mode_push_callback);
   nex_switch_play_pause.attachPush(nex_switch_play_pause_push_callback);
   nex_zyl_klemmblock.attachPush(nex_zyl_klemmblock_push_callback);
-  nex_zyl_feder_zuluft.attachPush(nex_zyl_feder_zuluft_push_callback);
-  nex_zyl_feder_abluft.attachPush(nex_zyl_feder_abluft_push_callback);
+  nex_zyl_800_zuluft.attachPush(nex_zyl_800_zuluft_push_callback);
+  nex_zyl_800_abluft.attachPush(nex_zyl_800_abluft_push_callback);
   nex_einschaltventil.attachPush(nex_einschaltventil_push_callback);
   // PAGE 3:
   nex_button_1_left.attachPush(nex_button_1_left_push_callback);
@@ -599,16 +600,16 @@ void display_loop_page_1_left_side() {
 void display_loop_page_1_right_side() {
 
   // UPDATE SWITCHBUTTON (dual state):
-  if (zyl_feder_zuluft.get_state() != nex_state_zyl_feder_zuluft) {
+  if (zyl_800_zuluft.get_state() != nex_state_zyl_800_zuluft) {
     Serial2.print("click bt5,1"); // CLICK BUTTON
     send_to_nextion();
-    nex_state_zyl_feder_zuluft = !nex_state_zyl_feder_zuluft;
+    nex_state_zyl_800_zuluft = !nex_state_zyl_800_zuluft;
   }
   // UPDATE SWITCHBUTTON (dual state):
-  if (zyl_feder_abluft.get_state() != nex_state_zyl_feder_abluft) {
+  if (zyl_800_abluft.get_state() != nex_state_zyl_800_abluft) {
     Serial2.print("click bt4,1"); // CLICK BUTTON
     send_to_nextion();
-    nex_state_zyl_feder_abluft = !nex_state_zyl_feder_abluft;
+    nex_state_zyl_800_abluft = !nex_state_zyl_800_abluft;
   }
   // UPDATE SWITCHBUTTON (dual state):
   if (zyl_klemmblock.get_state() != nex_state_zyl_klemmblock) {
@@ -634,11 +635,11 @@ void display_loop_page_1_right_side() {
   }
 
   // UPDATE SWITCHBUTTON (dual state):
-  if (zyl_messer.get_state() != nex_state_zyl_messer) {
+  if (zyl_block_messer.get_state() != nex_state_zyl_messer) {
     Serial2.print("click b6,");
-    Serial2.print(zyl_messer.get_state()); // PUSH OR RELEASE BUTTON
+    Serial2.print(zyl_block_messer.get_state()); // PUSH OR RELEASE BUTTON
     send_to_nextion();
-    nex_state_zyl_messer = zyl_messer.get_state();
+    nex_state_zyl_messer = zyl_block_messer.get_state();
   }
   // UPDATE BUTTON (momentary)
   if (zyl_schweisstaste.get_state() != nex_state_zyl_schweisstaste) {
@@ -795,7 +796,7 @@ float get_pressure_from_sensor() {
   // 10V   => analogRead 333.3 (10V/30mV)
   // 12bar => anlaogRead 333.3
   // 1bar  => analogRead 27.778
-  return analogRead(drucksensor) / 27.778; //[bar]
+  return analogRead(DRUCKSENSOR) / 27.778; //[bar]
 }
 
 float smoothe_measurement(float pressure_float) {
@@ -879,7 +880,7 @@ void read_and_process_pressure() {
 void monitor_strap_detectors() {
 
   // BANDSENSOREN ABFRAGEN:
-  if (digitalRead(bandsensor_oben) && digitalRead(bandsensor_unten)) {
+  if (bandsensor_oben.get_raw_button_state() && bandsensor_unten.get_raw_button_state()) {
     band_vorhanden = true;
   } else {
     band_vorhanden = false;
@@ -887,13 +888,13 @@ void monitor_strap_detectors() {
   }
 
   // START- UND ENDPOSITIONSSCHALTER ABFRAGEN:
-  startposition_erreicht = digitalRead(taster_startposition);
-  endposition_erreicht = digitalRead(taster_endposition);
+  startposition_erreicht = taster_startposition.get_raw_button_state();
+  endposition_erreicht = taster_endposition.get_raw_button_state();
 }
 
 // CREATE CYCLE STEP CLASSES ***************************************************
 // -----------------------------------------------------------------------------
-class Aufwecken_ : public Cycle_step {
+class Aufwecken : public Cycle_step {
   String get_display_text() { return "AUFWECKEN"; }
 
   void do_initial_stuff(){};
@@ -910,10 +911,18 @@ class Vorschieben : public Cycle_step {
   String get_display_text() { return "VORSCHIEBEN"; }
   long feed_time;
 
-  void do_initial_stuff() { feed_time = eeprom_counter.get_value(strap_eject_feed_time) * 1000; };
+  void do_initial_stuff() {
+    feed_time = eeprom_counter.get_value(strap_eject_feed_time) * 1000;
+    cycle_step_delay.set_unstarted();
+    zyl_wippenhebel.set(1);
+    zyl_block_klemmrad.set(1);
+    zyl_block_foerdermotor.set(1);
+  };
   void do_loop_stuff() {
-    zyl_spanntaste.stroke(feed_time, 300);
-    if (zyl_spanntaste.stroke_completed()) {
+    if (cycle_step_delay.delay_time_is_up(feed_time)) {
+      zyl_wippenhebel.set(0);
+      zyl_block_klemmrad.set(0);
+      zyl_block_foerdermotor.set(0);
       set_loop_completed();
     }
   };
@@ -924,9 +933,9 @@ class Schneiden : public Cycle_step {
 
   void do_initial_stuff(){};
   void do_loop_stuff() {
-    zyl_messer.stroke(1500, 500);
+    zyl_block_messer.stroke(1500, 500);
 
-    if (zyl_messer.stroke_completed()) {
+    if (zyl_block_messer.stroke_completed()) {
       set_loop_completed();
     }
   };
@@ -951,13 +960,13 @@ class Startdruck : public Cycle_step {
 
   void do_initial_stuff() {
     cycle_step_delay.set_unstarted();
-    zyl_feder_zuluft.set(1); // 1=füllen 0=geschlossen
-    zyl_feder_abluft.set(1); // 1=geschlossen 0=entlüften
+    zyl_800_zuluft.set(1); // 1=füllen 0=geschlossen
+    zyl_800_abluft.set(1); // 1=geschlossen 0=entlüften
   };
 
   void do_loop_stuff() {
     if (cycle_step_delay.delay_time_is_up(eeprom_counter.get_value(startfuelldauer))) {
-      zyl_feder_zuluft.set(0); // 1=füllen 0=geschlossen
+      zyl_800_zuluft.set(0); // 1=füllen 0=geschlossen
       set_loop_completed();
     };
   };
@@ -1001,8 +1010,8 @@ class Abkuehlen : public Cycle_step {
 
   void do_initial_stuff() {
     cycle_step_delay.set_unstarted();
-    zyl_feder_zuluft.set(0); // 1=füllen 0=geschlossen
-    zyl_feder_abluft.set(0); // 1=geschlossen 0=entlüften
+    zyl_800_zuluft.set(0); // 1=füllen 0=geschlossen
+    zyl_800_abluft.set(0); // 1=geschlossen 0=entlüften
   };
   void do_loop_stuff() {
     if (pressure_float < 0.1) // warten bis der Druck ist abgebaut
@@ -1045,14 +1054,14 @@ class Zurueckfahren : public Cycle_step {
   String get_display_text() { return "ZURUECKFAHREN"; }
 
   void do_initial_stuff() {
-    zyl_feder_zuluft.set(1); // 1=füllen 0=geschlossen
-    zyl_feder_abluft.set(0); // 1=geschlossen 0=entlüften
+    zyl_800_zuluft.set(1); // 1=füllen 0=geschlossen
+    zyl_800_abluft.set(0); // 1=geschlossen 0=entlüften
     cycle_step_delay.set_unstarted();
   };
   void do_loop_stuff() {
     if (startposition_erreicht) {
-      zyl_feder_zuluft.set(0); // 1=füllen 0=geschlossen
-      zyl_feder_abluft.set(0); // 1=geschlossen 0=entlüften
+      zyl_800_zuluft.set(0); // 1=füllen 0=geschlossen
+      zyl_800_abluft.set(0); // 1=geschlossen 0=entlüften
       if (pressure_float < 0.1) // warten bis der Druck abgebaut ist
       {
         if (cycle_step_delay.delay_time_is_up(500)) {
@@ -1096,18 +1105,14 @@ void setup() {
 
   nextion_setup();
 
-  pinMode(bandsensor_oben, INPUT);
-  pinMode(bandsensor_unten, INPUT);
-  pinMode(taster_startposition, INPUT);
-  pinMode(taster_endposition, INPUT);
-  pinMode(drucksensor, INPUT);
+  pinMode(DRUCKSENSOR, INPUT);
 
   delay(2000);
 
   //------------------------------------------------
   // PUSH THE CYCLE STEPS INTO THE VECTOR CONTAINER:
   // PUSH SEQUENCE = CYCLE SEQUENCE !
-  main_cycle_steps.push_back(new Aufwecken_);
+  main_cycle_steps.push_back(new Aufwecken);
   main_cycle_steps.push_back(new Vorschieben);
   main_cycle_steps.push_back(new Schneiden);
   main_cycle_steps.push_back(new Festklemmen);
@@ -1126,6 +1131,7 @@ void setup() {
   //------------------------------------------------
 
   einschaltventil.set(1); //ÖFFNET DAS HAUPTLUFTVENTIL
+  zyl_tool_niederhalter.set(1);
 
   Serial.println("EXIT SETUP");
 }

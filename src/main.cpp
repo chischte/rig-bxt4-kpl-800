@@ -64,6 +64,14 @@ Insomnia nex_reset_button_timeout(10000); // pushtime to reset counter
 // long  (-2,147,483,648 to 2,147,483,647)
 // float (6-7 Digits)
 
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
+bool is_in_display_debug_mode = true;
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
+
 bool band_vorhanden = false;
 
 // byte Testzyklenzaehler;
@@ -212,7 +220,7 @@ void nex_page_1_push_callback(void *ptr) {
 
   // REFRESH BUTTON STATES:
   nex_state_cycle_step = 1;
-  nex_state_step_mode = true;
+  nex_state_step_mode = 1;
 
   nex_state_zyl_800_zuluft = 0;
   nex_state_zyl_800_abluft = 1; // INVERTED VALVE LOGIC
@@ -253,8 +261,6 @@ void nex_switch_play_pause_push_callback(void *ptr) {
 void nex_switch_mode_push_callback(void *ptr) {
   state_controller.toggle_step_auto_mode();
   nex_state_step_mode = state_controller.is_in_step_mode();
-  Serial2.print("click bt1,1"); // CLICK BUTTON
-  send_to_nextion();
 }
 void nex_but_stepback_push_callback(void *ptr) {
   state_controller.set_machine_stop();
@@ -505,19 +511,13 @@ String get_main_cycle_display_string() {
   return display_text_cycle_name;
 }
 
-void update_main_cycle_name() {
+void update_cycle_name() {
   if (nex_state_cycle_step != state_controller.get_current_step()) {
     String number = String(state_controller.get_current_step() + 1);
     String name = get_main_cycle_display_string();
     Serial.println(number + " " + name);
     display_text_in_field(number + " " + name, "t0");
     nex_state_cycle_step = state_controller.get_current_step();
-  }
-}
-
-void update_cycle_name() {
-  if (state_controller.is_in_step_mode() || state_controller.is_in_auto_mode()) {
-    update_main_cycle_name();
   }
 }
 
@@ -844,6 +844,10 @@ void read_and_process_pressure() {
 void monitor_strap_detectors() {
 
   // BANDSENSOREN ABFRAGEN:
+  if (is_in_display_debug_mode) {
+    band_vorhanden = true;
+    return;
+  }
   if (bandsensor_oben.get_raw_button_state() && bandsensor_unten.get_raw_button_state()) {
     band_vorhanden = true;
   } else {
@@ -940,6 +944,9 @@ class Spannen : public Cycle_step {
     cycle_step_delay.set_unstarted();
   };
   void do_loop_stuff() {
+    if (is_in_display_debug_mode) {
+      set_loop_completed();
+    };
     if (taster_endposition.get_raw_button_state()) {
       if (cycle_step_delay.delay_time_is_up(400)) {
         set_loop_completed();
@@ -966,7 +973,7 @@ class Schweissen : public Cycle_step {
 // -----------------------------------------------------------------------------
 // Abkühlen und Druck abbauen
 class Abkuehlen : public Cycle_step {
-  String get_display_text() { return "ABKUELHEN"; }
+  String get_display_text() { return "ABKUEHLEN"; }
 
   void do_initial_stuff() {
     cycle_step_delay.set_unstarted();
@@ -1019,6 +1026,11 @@ class Zurueckfahren : public Cycle_step {
     cycle_step_delay.set_unstarted();
   };
   void do_loop_stuff() {
+    if (is_in_display_debug_mode) {
+      eeprom_counter.count_one_up(shorttime_counter);
+      eeprom_counter.count_one_up(longtime_counter);
+      set_loop_completed();
+    };
     if (taster_startposition.get_raw_button_state()) {
       zyl_800_zuluft.set(0); // 1=füllen 0=geschlossen
       zyl_800_abluft.set(0); // 1=geschlossen 0=entlüften
@@ -1046,7 +1058,7 @@ class Pause : public Cycle_step {
   };
 
   void do_loop_stuff() {
-    if (testZyklenZaehler == eeprom_counter.get_value(cycles_in_a_row)) {
+    if (testZyklenZaehler >= eeprom_counter.get_value(cycles_in_a_row)) {
       if (long_pause_delay.delay_time_is_up(abkuehldauer)) {
         testZyklenZaehler = 0;
         set_loop_completed();
@@ -1091,6 +1103,8 @@ void setup() {
   // CONFIGURE THE STATE CONTROLLER:
   state_controller.set_no_of_steps(main_cycle_steps.size());
   //------------------------------------------------
+
+  state_controller.set_step_mode();
 
   einschaltventil.set(1); //ÖFFNET DAS HAUPTLUFTVENTIL
 

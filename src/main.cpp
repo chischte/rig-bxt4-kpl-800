@@ -577,7 +577,6 @@ void update_switchstate_play_pause() {
 }
 
 void update_switchstate_step_auto() {
-  // UPDATE SWITCHSTATE "STEP"/"AUTO"-MODE
   if (nex_state_step_mode != state_controller.is_in_step_mode()) {
     toggle_ds_switch("bt1");
     nex_state_step_mode = state_controller.is_in_step_mode();
@@ -622,66 +621,84 @@ void display_loop_page_1_left_side() {
 
 // DISPLAY LOOP PAGE 1 RIGHT SIDE: ---------------------------------------------
 
-void display_loop_page_1_right_side() {
-
-  //SUBFUNKTIONENEN MACHEN
-  //SUBFUNKTIONENEN MACHEN
-  //SUBFUNKTIONENEN MACHEN
-  //SUBFUNKTIONENEN MACHEN
-  //SUBFUNKTIONENEN MACHEN
-  //SUBFUNKTIONENEN MACHEN
-  //SUBFUNKTIONENEN MACHEN
-  //SUBFUNKTIONENEN MACHEN
-
+void update_button_zuluft_800() {
   if (zyl_800_zuluft.get_state() != nex_state_zyl_800_zuluft) {
     toggle_ds_switch("bt5");
     nex_state_zyl_800_zuluft = !nex_state_zyl_800_zuluft;
   }
+}
+
+void update_button_abluft_800() {
   if (zyl_800_abluft.get_state() != nex_state_zyl_800_abluft) {
     toggle_ds_switch("bt4");
     nex_state_zyl_800_abluft = !nex_state_zyl_800_abluft;
   }
+}
+
+void update_button_klemmblock() {
   if (zyl_klemmblock.get_state() != nex_state_zyl_klemmblock) {
     toggle_ds_switch("bt3");
     nex_state_zyl_klemmblock = !nex_state_zyl_klemmblock;
   }
+}
 
+void update_button_wippenhebel() {
   if (zyl_wippenhebel.get_state() != nex_state_zyl_wippenhebel) {
     bool state = zyl_wippenhebel.get_state();
     set_momentary_button_high_or_low("b5", state);
     nex_state_zyl_wippenhebel = zyl_wippenhebel.get_state();
   }
+}
 
+void update_button_spanntaste() {
   if (zyl_spanntaste.get_state() != nex_state_zyl_spanntaste) {
     bool state = zyl_spanntaste.get_state();
     set_momentary_button_high_or_low("b4", state);
     nex_state_zyl_spanntaste = zyl_spanntaste.get_state();
   }
+}
 
+void update_button_messer() {
   if (zyl_block_messer.get_state() != nex_state_zyl_messer) {
     bool state = zyl_block_messer.get_state();
     set_momentary_button_high_or_low("b6", state);
     nex_state_zyl_messer = zyl_block_messer.get_state();
   }
+}
 
-  bool zyl_foerdern = (zyl_block_klemmrad.get_state() && zyl_block_foerdermotor.get_state());
-
-  if (zyl_foerdern != nex_state_zyl_foerdern) {
-    bool state = zyl_foerdern;
+void update_button_foerdern() {
+  bool state = zyl_block_foerdermotor.get_state();
+  if (state != nex_state_zyl_foerdern) {
     set_momentary_button_high_or_low("b7", state);
-    nex_state_zyl_foerdern = zyl_foerdern;
+    nex_state_zyl_foerdern = state;
   }
+}
 
+void update_button_schweissen() {
   if (zyl_schweisstaste.get_state() != nex_state_zyl_schweisstaste) {
     bool state = zyl_schweisstaste.get_state();
     set_momentary_button_high_or_low("b3", state);
     nex_state_zyl_schweisstaste = zyl_schweisstaste.get_state();
   }
+}
 
+void update_button_hauptluft() {
   if (einschaltventil.get_state() != nex_state_einschaltventil) {
     toggle_ds_switch("bt6");
     nex_state_einschaltventil = einschaltventil.get_state();
   }
+}
+
+void display_loop_page_1_right_side() {
+  update_button_zuluft_800();
+  update_button_abluft_800();
+  update_button_klemmblock();
+  update_button_wippenhebel();
+  update_button_spanntaste();
+  update_button_messer();
+  update_button_foerdern();
+  update_button_schweissen();
+  update_button_hauptluft();
 }
 
 // DIPLAY LOOP PAGE 2 LEFT SIDE: -----------------------------------------------

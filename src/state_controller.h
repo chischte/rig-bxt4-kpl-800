@@ -4,12 +4,11 @@
  * MAIN OPERATION MODES :
  * 
  * 1) step_mode
- * 
  * 2) auto_mode
- * 
- * 3) error_mode (error mode can run independently, on top of other modes)
+ * 3) error_mode
+ * 4) reset mode
  *
- * 4) reset mode (reset can run independently, on top of other modes)
+ * Status "machine_is_running" is set independently.
  * 
  * *****************************************************************************
  */
@@ -32,11 +31,11 @@ public:
   void set_auto_mode();
   bool is_in_auto_mode();
 
-  void set_error_mode(bool error_mode);
+  void set_error_mode();
   bool is_in_error_mode();
 
-  void set_reset_mode(bool reset_state);
-  bool reset_mode_is_active();
+  void set_reset_mode();
+  bool is_in_reset_mode();
 
   void set_run_after_reset(bool run_after_reset);
   bool run_after_reset_is_active();
@@ -53,7 +52,6 @@ public:
   void set_current_step_to(int cycle_step);
   int get_current_step();
   bool step_switch_has_happend();
-
 
   // VARIABLES:
   // n.a.

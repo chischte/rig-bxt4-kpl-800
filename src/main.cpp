@@ -27,9 +27,15 @@
 #include <cycle_step.h> //       blueprint of a cycle step
 #include <state_controller.h> // keeps track of machine states
 
-// PRE-SETUP SECTION / PIN LAYOUT **********************************************
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
+bool is_in_display_debug_mode = true; // MUST BE FALSE IN PRODUCTION !!!<-|
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
+// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
 
-State_controller state_controller;
+// PRE-SETUP SECTION / PIN LAYOUT **********************************************
 
 // INPUT PINS / SENSORS:
 
@@ -55,7 +61,10 @@ Cylinder zyl_block_foerdermotor(CONTROLLINO_R5);
 Insomnia cycle_step_delay;
 Insomnia long_pause_delay;
 Insomnia nex_force_update_delay;
-Insomnia nex_reset_button_timeout(10000); // pushtime to reset counter
+Insomnia machine_stopped_error_timeout(10000);
+Insomnia nex_reset_button_timeout(5000); // pushtime to reset counter
+
+State_controller state_controller;
 
 // GLOBAL VARIABLES ------------------------------------------------------------
 // bool (1/0 or true/false)
@@ -64,28 +73,20 @@ Insomnia nex_reset_button_timeout(10000); // pushtime to reset counter
 // long  (-2,147,483,648 to 2,147,483,647)
 // float (6-7 Digits)
 
-// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
-// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
-// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
-bool is_in_display_debug_mode = true;
-// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
-// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
-// !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!
-
-bool band_vorhanden = false;
-
-// byte Testzyklenzaehler;
 byte cycle_step = 0;
+byte timeout_count = 0;
 
 unsigned long runtime;
 unsigned long runtime_stopwatch;
 unsigned long startfuelltimer;
 
+String error_message = "";
+
 // PUBLIC DRUCK UND KRAFT:
 float pressure_float;
 unsigned int force_int;
 
-// SET UP EEPROM COUNTER:
+// SET UP EEPROM COUNTER ********************************************************
 enum eeprom_counter {
   startfuelldauer,
   shorttime_counter,
@@ -106,6 +107,7 @@ String get_main_cycle_display_string();
 void display_text_in_field(String text, String text_field);
 void send_to_nextion();
 void clear_text_field(String text_field);
+void clear_info_field();
 
 // CREATE VECTOR CONTAINER FOR THE CYCLE STEPS OBJECTS *************************
 
@@ -115,6 +117,36 @@ std::vector<Cycle_step *> main_cycle_steps;
 // NON NEXTION FUNCTIONS *******************************************************
 
 void reset_flag_of_current_step() { main_cycle_steps[state_controller.get_current_step()]->reset_flags(); }
+
+void reset_cylinders() {
+  zyl_wippenhebel.set(0);
+  zyl_spanntaste.set(0);
+  zyl_schweisstaste.set(0);
+  zyl_800_zuluft.set(0);
+  zyl_800_abluft.set(0);
+}
+void reset_state_controller() {
+  state_controller.set_machine_stop();
+  state_controller.set_step_mode();
+  reset_flag_of_current_step();
+  state_controller.set_current_step_to(0);
+  reset_flag_of_current_step();
+}
+
+void reset_machine() {
+  reset_cylinders();
+  reset_state_controller();
+  clear_info_field();
+  error_message = "";
+  machine_stopped_error_timeout.reset_time();
+}
+
+void stop_machine() {
+  zyl_800_zuluft.set(0);
+  state_controller.set_step_mode();
+  state_controller.set_machine_stop();
+  reset_cylinders();
+}
 
 // NEXTION VARIABLES -----------------------------------------------------------
 int nex_current_page;
@@ -131,12 +163,11 @@ bool nex_state_zyl_klemmblock;
 bool nex_state_zyl_wippenhebel;
 bool nex_state_zyl_spanntaste;
 bool nex_state_zyl_messer;
+bool nex_state_zyl_foerdern;
 bool nex_state_zyl_schweisstaste;
 bool nex_state_machine_running;
-bool nex_state_band_vorhanden = 1;
-//***************************************************************************
 bool nex_state_step_mode = true;
-
+String nex_state_error_message = "INFO";
 byte nex_state_cycle_step;
 long nex_state_cycles_in_a_row;
 long nex_state_long_cooldown_time;
@@ -158,7 +189,7 @@ NexPage nex_page_0 = NexPage(0, 0, "page_0");
 NexPage nex_page_1 = NexPage(1, 0, "page1");
 NexButton nex_but_stepback = NexButton(1, 6, "b1");
 NexButton nex_but_stepnxt = NexButton(1, 7, "b2");
-NexButton nex_but_reset_cycle = NexButton(1, 5, "b0");
+NexButton nex_but_reset_machine = NexButton(1, 5, "b0");
 NexDSButton nex_switch_play_pause = NexDSButton(1, 2, "bt0");
 NexDSButton nex_switch_mode = NexDSButton(1, 4, "bt1");
 
@@ -169,8 +200,9 @@ NexDSButton nex_zyl_klemmblock = NexDSButton(1, 12, "bt3");
 NexButton nex_zyl_wippenhebel = NexButton(1, 11, "b5");
 NexButton nex_mot_band_unten = NexButton(1, 10, "b4");
 NexDSButton nex_zyl_messer = NexDSButton(1, 17, "b6");
+NexButton nex_zyl_foerdern = NexButton(1, 18, "b7");
 NexButton nex_zyl_schweisstaste = NexButton(1, 8, "b3");
-NexButton nex_einschaltventil = NexButton(1, 16, "bt6");
+NexButton nex_hauptluft = NexButton(1, 16, "bt6");
 
 // PAGE 2 - LEFT SIDE:
 NexPage nex_page_2 = NexPage(2, 0, "page2");
@@ -198,10 +230,10 @@ NexTouch *nex_listen_list[] = {
     // PAGES
     &nex_page_0, &nex_page_1, &nex_page_2, &nex_page_3,
     // PAGE 0 1 2:
-    &nex_but_reset_shorttime_counter, &nex_but_stepback, &nex_but_stepnxt, &nex_but_reset_cycle, &nex_but_slider_1_left,
-    &nex_but_slider_1_right, &nex_switch_play_pause, &nex_switch_mode, &nex_zyl_messer, &nex_zyl_klemmblock,
-    &nex_zyl_800_zuluft, &nex_zyl_800_abluft, &nex_zyl_wippenhebel, &nex_mot_band_unten, &nex_zyl_schweisstaste,
-    &nex_einschaltventil,
+    &nex_but_reset_shorttime_counter, &nex_but_stepback, &nex_but_stepnxt, &nex_but_reset_machine,
+    &nex_but_slider_1_left, &nex_but_slider_1_right, &nex_switch_play_pause, &nex_switch_mode, &nex_zyl_foerdern,
+    &nex_zyl_messer, &nex_zyl_klemmblock, &nex_zyl_800_zuluft, &nex_zyl_800_abluft, &nex_zyl_wippenhebel,
+    &nex_mot_band_unten, &nex_zyl_schweisstaste, &nex_hauptluft,
     // PAGE 3:
     &nex_button_1_left, &nex_button_1_right, &nex_button_2_left, &nex_button_2_right, &nex_button_3_left,
     &nex_button_3_right,
@@ -219,18 +251,18 @@ void nex_page_1_push_callback(void *ptr) {
   nex_current_page = 1;
 
   // REFRESH BUTTON STATES:
-  nex_state_cycle_step = 1;
+  nex_state_cycle_step = -1;
   nex_state_step_mode = 1;
-
+  nex_state_error_message = "INFO";
   nex_state_zyl_800_zuluft = 0;
   nex_state_zyl_800_abluft = 1; // INVERTED VALVE LOGIC
   nex_state_zyl_klemmblock = 0;
   nex_state_zyl_wippenhebel = 0;
   nex_state_zyl_spanntaste = 0;
   nex_state_zyl_messer = 0;
+  nex_state_zyl_foerdern = 0;
   nex_state_zyl_schweisstaste = 0;
   nex_state_machine_running = 0;
-  nex_state_band_vorhanden = !band_vorhanden;
   nex_state_einschaltventil = 0;
 }
 
@@ -276,12 +308,7 @@ void nex_but_stepnxt_push_callback(void *ptr) {
   state_controller.switch_to_next_step();
   reset_flag_of_current_step();
 }
-void nex_but_reset_cycle_push_callback(void *ptr) {
-  state_controller.set_reset_mode(true);
-  state_controller.set_run_after_reset(0);
-  state_controller.set_step_mode();
-  clear_text_field("t4"); // info field
-}
+void nex_but_reset_machine_push_callback(void *ptr) { reset_machine(); }
 
 // TOUCH EVENT FUNCTIONS PAGE 1 - RIGHT SIDE -----------------------------------
 
@@ -289,6 +316,7 @@ void nex_zyl_800_zuluft_push_callback(void *ptr) {
   zyl_800_zuluft.toggle();
   nex_state_zyl_800_zuluft = !nex_state_zyl_800_zuluft;
 }
+void nex_zyl_800_zuluft_pop_callback(void *ptr) {}
 
 void nex_zyl_800_abluft_push_callback(void *ptr) {
   zyl_800_abluft.toggle();
@@ -316,7 +344,16 @@ void nex_zyl_messer_push_callback(void *ptr) { zyl_block_messer.set(1); }
 
 void nex_zyl_messer_pop_callback(void *ptr) { zyl_block_messer.set(0); }
 
-void nex_einschaltventil_push_callback(void *ptr) {
+void nex_zyl_foerdern_push_callback(void *ptr) {
+  zyl_block_klemmrad.set(1);
+  zyl_block_foerdermotor.set(1);
+}
+void nex_zyl_foerdern_pop_callback(void *ptr) {
+  zyl_block_klemmrad.set(0);
+  zyl_block_foerdermotor.set(0);
+}
+
+void nex_hauptluft_push_callback(void *ptr) {
   einschaltventil.toggle();
   nex_state_einschaltventil = !nex_state_einschaltventil;
 }
@@ -388,15 +425,15 @@ void nextion_setup() {
   nex_but_stepback.attachPush(nex_but_stepback_push_callback);
   nex_but_stepnxt.attachPush(nex_but_stepnxt_push_callback);
   nex_zyl_klemmblock.attachPush(nex_zyl_klemmblock_push_callback);
-  nex_but_reset_cycle.attachPush(nex_but_reset_cycle_push_callback);
+  nex_but_reset_machine.attachPush(nex_but_reset_machine_push_callback);
   nex_but_stepback.attachPush(nex_but_stepback_push_callback);
   nex_but_stepnxt.attachPush(nex_but_stepnxt_push_callback);
   nex_switch_mode.attachPush(nex_switch_mode_push_callback);
   nex_switch_play_pause.attachPush(nex_switch_play_pause_push_callback);
   nex_zyl_klemmblock.attachPush(nex_zyl_klemmblock_push_callback);
   nex_zyl_800_zuluft.attachPush(nex_zyl_800_zuluft_push_callback);
+  nex_zyl_800_zuluft.attachPop(nex_zyl_800_zuluft_pop_callback);
   nex_zyl_800_abluft.attachPush(nex_zyl_800_abluft_push_callback);
-  nex_einschaltventil.attachPush(nex_einschaltventil_push_callback);
   nex_zyl_wippenhebel.attachPush(nex_zyl_wippenhebel_push_callback);
   nex_zyl_wippenhebel.attachPop(nex_zyl_wippenhebel_pop_callback);
   nex_mot_band_unten.attachPush(nex_mot_band_unten_push_callback);
@@ -405,6 +442,9 @@ void nextion_setup() {
   nex_zyl_schweisstaste.attachPop(nex_zyl_schweisstaste_pop_callback);
   nex_zyl_messer.attachPush(nex_zyl_messer_push_callback);
   nex_zyl_messer.attachPop(nex_zyl_messer_pop_callback);
+  nex_zyl_foerdern.attachPush(nex_zyl_foerdern_push_callback);
+  nex_zyl_foerdern.attachPop(nex_zyl_foerdern_pop_callback);
+  nex_hauptluft.attachPush(nex_hauptluft_push_callback);
   // PAGE 2:
   nex_page_2.attachPush(nex_page_2_push_callback);
   nex_but_slider_1_left.attachPush(nex_but_slider_1_left_push_callback);
@@ -451,12 +491,14 @@ String add_suffix_to_value(long value, String suffix) {
 }
 
 void display_text_in_info_field(String text) {
-  Serial2.print("t4");
-  Serial2.print(".txt=");
-  Serial2.print("\"");
-  Serial2.print(text);
-  Serial2.print("\"");
-  send_to_nextion();
+  if (nex_current_page == 1) {
+    Serial2.print("t4");
+    Serial2.print(".txt=");
+    Serial2.print("\"");
+    Serial2.print(text);
+    Serial2.print("\"");
+    send_to_nextion();
+  }
 }
 
 void hide_info_field() {
@@ -473,6 +515,12 @@ void clear_text_field(String text_field) {
   Serial2.print(""); // erase text
   Serial2.print("\"");
   send_to_nextion();
+}
+
+void clear_info_field() {
+  if (nex_current_page == 1) {
+    clear_text_field("t4");
+  }
 }
 
 void display_value_in_field(int value, String value_field) {
@@ -536,21 +584,17 @@ void update_switchstate_step_auto() {
   }
 }
 
-void show_error_no_strap() {
-  if (nex_state_band_vorhanden != band_vorhanden) {
-    if (!band_vorhanden) {
-      display_text_in_info_field("BAND LEER!");
-    } else {
-      display_text_in_info_field("");
-    }
-    nex_state_band_vorhanden = band_vorhanden;
+void show_error() {
+  if (nex_state_error_message != error_message) {
+    display_text_in_info_field(error_message);
   }
+  nex_state_error_message = error_message;
 }
 
 void show_remaining_pause_time() {
   unsigned long restpausenzeit = long_pause_delay.get_remaining_delay_time() / 1000;
 
-  if (band_vorhanden && (nex_state_restpausenzeit != restpausenzeit)) {
+  if (nex_state_restpausenzeit != restpausenzeit) {
     if (restpausenzeit > 0 && restpausenzeit < 1000) {
       String pause = "PAUSE: ";
       String zeit = add_suffix_to_value(restpausenzeit, "s");
@@ -571,7 +615,7 @@ void display_loop_page_1_left_side() {
 
   update_switchstate_step_auto();
 
-  show_error_no_strap();
+  show_error();
 
   show_remaining_pause_time();
 }
@@ -579,6 +623,15 @@ void display_loop_page_1_left_side() {
 // DISPLAY LOOP PAGE 1 RIGHT SIDE: ---------------------------------------------
 
 void display_loop_page_1_right_side() {
+
+  //SUBFUNKTIONENEN MACHEN
+  //SUBFUNKTIONENEN MACHEN
+  //SUBFUNKTIONENEN MACHEN
+  //SUBFUNKTIONENEN MACHEN
+  //SUBFUNKTIONENEN MACHEN
+  //SUBFUNKTIONENEN MACHEN
+  //SUBFUNKTIONENEN MACHEN
+  //SUBFUNKTIONENEN MACHEN
 
   if (zyl_800_zuluft.get_state() != nex_state_zyl_800_zuluft) {
     toggle_ds_switch("bt5");
@@ -610,6 +663,15 @@ void display_loop_page_1_right_side() {
     set_momentary_button_high_or_low("b6", state);
     nex_state_zyl_messer = zyl_block_messer.get_state();
   }
+
+  bool zyl_foerdern = (zyl_block_klemmrad.get_state() && zyl_block_foerdermotor.get_state());
+
+  if (zyl_foerdern != nex_state_zyl_foerdern) {
+    bool state = zyl_foerdern;
+    set_momentary_button_high_or_low("b7", state);
+    nex_state_zyl_foerdern = zyl_foerdern;
+  }
+
   if (zyl_schweisstaste.get_state() != nex_state_zyl_schweisstaste) {
     bool state = zyl_schweisstaste.get_state();
     set_momentary_button_high_or_low("b3", state);
@@ -841,21 +903,6 @@ void read_and_process_pressure() {
   force_int = convert_pressure_to_force(pressure_float); // [N]
 }
 
-void monitor_strap_detectors() {
-
-  // BANDSENSOREN ABFRAGEN:
-  if (is_in_display_debug_mode) {
-    band_vorhanden = true;
-    return;
-  }
-  if (bandsensor_oben.get_raw_button_state() && bandsensor_unten.get_raw_button_state()) {
-    band_vorhanden = true;
-  } else {
-    band_vorhanden = false;
-    state_controller.set_machine_stop();
-  }
-}
-
 // CREATE CYCLE STEP CLASSES ***************************************************
 // -----------------------------------------------------------------------------
 class Aufwecken : public Cycle_step {
@@ -1052,6 +1099,8 @@ class Pause : public Cycle_step {
   unsigned long abkuehldauer;
 
   void do_initial_stuff() {
+    timeout_count = 0;
+    error_message = "";
     testZyklenZaehler++;
     long_pause_delay.set_unstarted();
     abkuehldauer = eeprom_counter.get_value(long_cooldown_time) * 1000;
@@ -1059,6 +1108,8 @@ class Pause : public Cycle_step {
 
   void do_loop_stuff() {
     if (testZyklenZaehler >= eeprom_counter.get_value(cycles_in_a_row)) {
+      // Deactivate timeout error during pause:
+      machine_stopped_error_timeout.reset_time();
       if (long_pause_delay.delay_time_is_up(abkuehldauer)) {
         testZyklenZaehler = 0;
         set_loop_completed();
@@ -1149,61 +1200,94 @@ void run_auto_mode() {
   }
 
   // RESET "MACHINE STOPPED ERROR TIMEOUT" AFTER EVERY STEP:
-  // if (state_controller.step_switch_has_happend() && state_controller.machine_is_running()) {
-  // machine_stopped_error_timeout.reset_time();
-  // }
+  if (state_controller.step_switch_has_happend()) {
+    machine_stopped_error_timeout.reset_time();
+  }
 }
 
-// RESET -----------------------------------------------------------------------
-void run_reset() { // reset_machine();
-  // stroke_wippenhebel();
-  // Reset zylinders
+// MONITOR ERRORS --------------------------------------------------------------
+void monitor_strap_detectors() {
+  // BANDSENSOREN ABFRAGEN:
+  if (is_in_display_debug_mode) {
+    return;
+  }
+  if (!bandsensor_oben.get_raw_button_state() || !bandsensor_unten.get_raw_button_state()) {
+    state_controller.set_machine_stop();
+    state_controller.set_error_mode();
+    error_message = "KEIN BAND";
+  }
+}
 
-  state_controller.set_reset_mode(0);
+void manage_timeout_actions() {
+  // TIMEOUT 1
+  if (timeout_count == 1) {
+    reset_machine();
+    state_controller.set_reset_mode();
+  }
+  // TIMEOUT 2
+  else if (timeout_count == 2) {
+    reset_machine();
+    state_controller.set_reset_mode();
+  }
+  // STOP
+  else if (timeout_count >= 3) {
+    stop_machine();
+    timeout_count = 0;
+    error_message = "STOPPED";
+    state_controller.set_error_mode();
+  }
+}
 
+void monitor_timeout() {
+  // Reset timeout if machine is not running:
+  if (!state_controller.machine_is_running()) {
+    machine_stopped_error_timeout.reset_time();
+  }
+  // Watch timeout if machine is running
+  else if (machine_stopped_error_timeout.has_timed_out()) {
+    timeout_count++;
+    manage_timeout_actions();
+  }
+}
+
+// RESET MODE ------------------------------------------------------------------
+void run_reset_mode() {
+  delay(5000);
   if (state_controller.run_after_reset_is_active()) {
+    error_message = "RUN RESET " + String(timeout_count);
     state_controller.set_auto_mode();
     state_controller.set_machine_running();
-  } else {
-    state_controller.set_step_mode();
   }
 }
 
 // MAIN LOOP -------------------------------------------------------------------
 void loop() {
 
-  // MONITOR PRESSURE:
-  read_and_process_pressure();
-
   // UPDATE DISPLAY:
   nextion_loop();
+
+  // MONITOR PRESSURE:
+  read_and_process_pressure();
 
   // CHECK IF STRAP IS AVAILABLE:
   monitor_strap_detectors();
 
-  // DO NOT WATCH TIMEOUTS IF MACHINE IS NOT RUNNING (PAUSE):
-  if (!state_controller.machine_is_running()) {
-    // machine_stopped_error_timeout.reset_time();
-    // bandsensor_timeout.reset_time();
-  }
-
-  // MONITOR TIMEMOUT ONLY WHEN RIG IS RUNNING IN AUTO MODE:
-  if (state_controller.machine_is_running() && state_controller.is_in_auto_mode()) {
-    // monitor_error_timeouts();
-  }
+  // MONITOR TIMEOUT ONLY WHEN RIG IS RUNNING:
+  monitor_timeout();
 
   // RUN STEP MODE:
   if (state_controller.is_in_step_mode()) {
+    state_controller.set_run_after_reset(false);
     run_step_mode();
   }
   // RUN STEP AUTO MODE:
   else if (state_controller.is_in_auto_mode()) {
+    state_controller.set_run_after_reset(true);
     run_auto_mode();
   }
-
-  // RUN RESET (ONCE):
-  if (state_controller.reset_mode_is_active()) {
-    run_reset();
+  // RUN RESET MODE:
+  else if (state_controller.is_in_reset_mode()) {
+    run_reset_mode();
   }
 }
 

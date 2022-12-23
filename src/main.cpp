@@ -58,6 +58,7 @@ Cylinder zyl_block_messer(CONTROLLINO_D6);
 Cylinder zyl_block_klemmrad(CONTROLLINO_D8);
 Cylinder zyl_block_foerdermotor(CONTROLLINO_R5);
 
+Insomnia simulation_step_timeout(500);
 Insomnia delay_cycle_step;
 Insomnia delay_long_pause;
 Insomnia delay_force_update;
@@ -173,6 +174,11 @@ void stop_machine() {
 
 // NEXTION VARIABLES -----------------------------------------------------------
 int nex_current_page;
+bool force_simulation_is_running;
+int tacho_simulation_picture_array[5] = {22, 23, 24, 25, 26}; // 0-4
+
+byte nex_tacho_simulated_force_level;
+byte simulated_force_level;
 
 // NEXTION SWITCH STATES LIST --------------------------------------------------
 // Every nextion switch button (dualstate) needs a switchstate variable to
@@ -578,6 +584,70 @@ void set_momentary_button_high_or_low(String button, bool state) {
 
 // DISPLAY LOOP PAGE 1 LEFT SIDE: ----------------------------------------------
 
+void display_picture_in_field(String picture, String textField) {
+  Serial2.print(textField);
+  Serial2.print(".pic=");
+  Serial2.print(picture);
+  send_to_nextion();
+  // 2nd picture for buttons:
+  Serial2.print(textField);
+  Serial2.print(".pic2=");
+  Serial2.print(picture);
+  send_to_nextion();
+}
+
+void update_simulation_tacho_force() {
+  String picture = String(tacho_simulation_picture_array[simulated_force_level]);
+  display_picture_in_field(picture, "spinner");
+  // Bring elements to front:
+  sendCommand("vis t_unit,1");
+  sendCommand("vis t_force,1");
+}
+
+void update_simulation_tacho() {
+  if (nex_tacho_simulated_force_level != simulated_force_level) {
+    update_simulation_tacho_force();
+    nex_tacho_simulated_force_level = simulated_force_level;
+  }
+}
+
+void increase_simulated_force() {
+  int number_of_forces = sizeof(tacho_simulation_picture_array) / sizeof(int);
+  int max_force_level = number_of_forces - 1;
+  static bool force_simulation_completed = false;
+
+  // Increase force while button is pushed:
+  if (simulation_step_timeout.is_marked_activated() && simulated_force_level < max_force_level) {
+    simulated_force_level++;
+  }
+  // Show final level:
+  else if (simulated_force_level == max_force_level) {
+    simulated_force_level = 1;
+  }
+  // Switch to time simulation:
+  else if (force_simulation_completed) {
+    simulated_force_level = 0;
+    force_simulation_completed = false;
+    force_simulation_is_running = false;
+    // sendCommand("vis t_force,0");
+    // sendCommand("vis t_unit,0");
+    // sendCommand("vis t_mode,0");
+  }
+}
+
+void simulate_tool_cycle() {
+
+  // Force simulation:
+  if (force_simulation_is_running) {
+    if (simulation_step_timeout.has_timed_out()) {
+      if (force_simulation_is_running) {
+        increase_simulated_force();
+        simulation_step_timeout.reset_time();
+      }
+    }
+  }
+}
+
 String get_main_cycle_display_string() {
   int current_step = state_controller.get_current_step();
   String display_text_cycle_name = main_cycle_steps[current_step]->get_display_text();
@@ -640,6 +710,9 @@ void show_remaining_pause_time() {
 }
 
 void display_loop_page_1_left_side() {
+
+  simulate_tool_cycle();
+  update_simulation_tacho();
 
   update_cycle_name();
 
@@ -1319,6 +1392,14 @@ void loop() {
   // RUN RESET MODE:
   else if (state_controller.is_in_reset_mode()) {
     run_reset_mode();
+  }
+
+  // RUN SPINNER:
+  if (state_controller.machine_is_running()) {
+    force_simulation_is_running = true;
+    simulation_step_timeout.set_flag_activated(1);
+  } else {
+    force_simulation_is_running = false;
   }
 }
 

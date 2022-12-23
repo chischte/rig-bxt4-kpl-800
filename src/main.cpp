@@ -194,7 +194,7 @@ byte nex_state_cycle_step;
 int nex_state_force_int;
 long nex_state_cycles_in_a_row;
 long nex_state_long_cooldown_time;
-long nex_state_strap_eject_feed_time;
+long nex_state_feed_time;
 long nex_state_shorttime_counter;
 long nex_state_longtime_counter;
 long nex_state_startfuelldauer;
@@ -213,36 +213,34 @@ NexPage nex_page_1 = NexPage(1, 0, "page1");
 NexButton nex_button_stepback = NexButton(1, 6, "b1");
 NexButton nex_button_stepnxt = NexButton(1, 7, "b2");
 NexButton nex_button_reset_machine = NexButton(1, 5, "b0");
-NexDSButton nex_button_play_pause = NexDSButton(1, 2, "bt0");
+NexDSButton nex_button_play_pause = NexDSButton(1, 22, "play");
 NexDSButton nex_button_mode = NexDSButton(1, 4, "bt1");
 
 // PAGE 1 - RIGHT SIDE
-NexDSButton nex_zyl_800_zuluft = NexDSButton(1, 14, "bt5");
-NexDSButton nex_zyl_800_abluft = NexDSButton(1, 13, "bt4");
-NexDSButton nex_zyl_klemmblock = NexDSButton(1, 12, "bt3");
-NexButton nex_zyl_wippenhebel = NexButton(1, 11, "b5");
-NexButton nex_zyl_spanntaste = NexButton(1, 10, "b4");
-NexDSButton nex_zyl_messer = NexDSButton(1, 17, "b6");
-NexButton nex_zyl_foerdern = NexButton(1, 18, "b7");
+NexDSButton nex_zyl_800_zuluft = NexDSButton(1, 13, "bt5");
+NexDSButton nex_zyl_800_abluft = NexDSButton(1, 12, "bt4");
+NexDSButton nex_zyl_klemmblock = NexDSButton(1, 11, "bt3");
+NexButton nex_zyl_wippenhebel = NexButton(1, 10, "b5");
+NexButton nex_zyl_spanntaste = NexButton(1, 9, "b4");
 NexButton nex_zyl_schweisstaste = NexButton(1, 8, "b3");
-NexButton nex_zyl_hauptluft = NexButton(1, 16, "bt6");
+NexDSButton nex_zyl_messer = NexDSButton(1, 16, "b6");
+NexButton nex_zyl_foerdern = NexButton(1, 17, "b7");
+NexButton nex_zyl_hauptluft = NexButton(1, 15, "bt6");
 
-// PAGE 2 - LEFT SIDE:
+// PAGE 2:
 NexPage nex_page_2 = NexPage(2, 0, "page2");
-NexButton nex_button_slider_1_left = NexButton(2, 5, "b1");
-NexButton nex_button_slider_1_right = NexButton(2, 6, "b2");
-
-// PAGE 2 - RIGHT SIDE:
-NexButton nex_button_reset_shorttime_counter = NexButton(2, 15, "b4");
+NexButton nex_button_1_left = NexButton(2, 5, "b1");
+NexButton nex_button_1_right = NexButton(2, 6, "b2");
+NexButton nex_button_2_left = NexButton(2, 8, "b0");
+NexButton nex_button_2_right = NexButton(2, 10, "b3");
+NexButton nex_button_3_left = NexButton(2, 12, "b4");
+NexButton nex_button_3_right = NexButton(2, 14, "b5");
+NexButton nex_button_4_left = NexButton(2, 16, "b6");
+NexButton nex_button_4_right = NexButton(2, 18, "b7");
 
 // PAGE 3:
 NexPage nex_page_3 = NexPage(3, 0, "page3");
-NexButton nex_button_1_left = NexButton(3, 5, "b1");
-NexButton nex_button_1_right = NexButton(3, 6, "b2");
-NexButton nex_button_2_left = NexButton(3, 8, "b0");
-NexButton nex_button_2_right = NexButton(3, 10, "b3");
-NexButton nex_button_3_left = NexButton(3, 12, "b4");
-NexButton nex_button_3_right = NexButton(3, 14, "b5");
+NexButton nex_button_reset_shorttime_counter = NexButton(3, 6, "b4");
 
 char buffer[100] = {0}; // This is needed only if you are going to receive a
     // text from the display. You can remove it otherwise.
@@ -259,10 +257,10 @@ NexTouch *nex_listen_list[] = {
     &nex_zyl_foerdern, &nex_zyl_messer, &nex_zyl_klemmblock, &nex_zyl_800_zuluft, &nex_zyl_800_abluft,
     &nex_zyl_wippenhebel, &nex_zyl_spanntaste, &nex_zyl_schweisstaste, &nex_zyl_hauptluft,
     // PAGE 2:
-    &nex_page_2, &nex_button_slider_1_left, &nex_button_slider_1_right, &nex_button_reset_shorttime_counter,
+    &nex_page_2, &nex_button_1_left, &nex_button_1_right, &nex_button_2_left, &nex_button_2_right, &nex_button_3_left,
+    &nex_button_3_right, &nex_button_4_left, &nex_button_4_right,
     // PAGE 3:
-    &nex_page_3, &nex_button_1_left, &nex_button_1_right, &nex_button_2_left, &nex_button_2_right, &nex_button_3_left,
-    &nex_button_3_right, //
+    &nex_page_3, &nex_button_reset_shorttime_counter, //
     NULL};
 
 // NEXTION TOUCH EVENT FUNCTIONS -----------------------------------------------
@@ -288,24 +286,24 @@ void nex_page_1_push_callback(void *ptr) {
   nex_state_zyl_schweisstaste = 0;
   nex_state_machine_running = 0;
   nex_state_zyl_hauptluft = 0;
+  nex_state_force_int = -5;
 }
 
 void nex_page_2_push_callback(void *ptr) {
   nex_current_page = 2;
   // REFRESH BUTTON STATES:
+  nex_state_cycles_in_a_row = 0;
+  nex_state_long_cooldown_time = 0;
+  nex_state_feed_time = 0;
   nex_state_startfuelldauer = 0;
-  nex_state_shorttime_counter = 0;
-  nex_state_longtime_counter = 0;
-  nex_state_force_int = 0;
   nex_state_federdruck = 10000;
 }
 
 void nex_page_3_push_callback(void *ptr) {
   nex_current_page = 3;
   // REFRESH BUTTON STATES:
-  nex_state_cycles_in_a_row = 0;
-  nex_state_long_cooldown_time = 0;
-  nex_state_strap_eject_feed_time = 0;
+  nex_state_shorttime_counter = 0;
+  nex_state_longtime_counter = 0;
 }
 
 // TOUCH EVENT FUNCTIONS PAGE 1 - LEFT SIDE ------------------------------------
@@ -383,7 +381,7 @@ void nex_zyl_hauptluft_push_callback(void *ptr) {
   nex_state_zyl_hauptluft = !nex_state_zyl_hauptluft;
 }
 
-// TOUCH EVENT FUNCTIONS PAGE 2 - LEFT SIDE ------------------------------------
+// TOUCH EVENT FUNCTIONS PAGE 2 ------------------------------------------------
 
 void decrease_slider_value(int eeprom_value_number, long min_value, long interval) {
   long current_value = eeprom_counter.get_value(eeprom_value_number);
@@ -405,24 +403,6 @@ void increase_slider_value(int eeprom_value_number, long max_value, long interva
   }
 }
 
-void nex_button_slider_1_left_push_callback(void *ptr) { decrease_slider_value(startfuelldauer, 0, 100); }
-
-void nex_button_slider_1_right_push_callback(void *ptr) { increase_slider_value(startfuelldauer, 7000, 100); }
-
-// TOUCH EVENT FUNCTIONS PAGE 2 - RIGHT SIDE -----------------------------------
-
-void nex_button_reset_shorttime_counter_push_callback(void *ptr) {
-  eeprom_counter.set_value(shorttime_counter, 0);
-
-  // RESET LONGTIME COUNTER IF RESET BUTTON IS PRESSED LONG ENOUGH:
-  // ACTIVATE TIMEOUT TO RESET LONGTIME COUNTER:
-  timeout_reset_button.reset_time();
-  timeout_reset_button.set_flag_activated(1);
-}
-
-void nex_button_reset_shorttime_counter_pop_callback(void *ptr) { timeout_reset_button.set_flag_activated(0); }
-// TOUCH EVENT FUNCTIONS PAGE 3 ------------------------------------------------
-
 void nex_button_1_left_push_callback(void *ptr) { decrease_slider_value(cycles_in_a_row, 0, 1); }
 
 void nex_button_1_right_push_callback(void *ptr) { increase_slider_value(cycles_in_a_row, 10, 1); }
@@ -434,6 +414,23 @@ void nex_button_2_right_push_callback(void *ptr) { increase_slider_value(long_co
 void nex_button_3_left_push_callback(void *ptr) { decrease_slider_value(strap_eject_feed_time, 0, 1); }
 
 void nex_button_3_right_push_callback(void *ptr) { increase_slider_value(strap_eject_feed_time, 20, 1); }
+
+void nex_button_4_left_push_callback(void *ptr) { decrease_slider_value(startfuelldauer, 0, 100); }
+
+void nex_button_4_right_push_callback(void *ptr) { increase_slider_value(startfuelldauer, 7000, 100); }
+
+// TOUCH EVENT FUNCTIONS PAGE 3 ------------------------------------------------
+
+void nex_button_reset_shorttime_counter_push_callback(void *ptr) {
+  eeprom_counter.set_value(shorttime_counter, 0);
+
+  // RESET LONGTIME COUNTER IF RESET BUTTON IS PRESSED LONG ENOUGH:
+  // ACTIVATE TIMEOUT TO RESET LONGTIME COUNTER:
+  timeout_reset_button.reset_time();
+  timeout_reset_button.set_flag_activated(1);
+}
+
+void nex_button_reset_shorttime_counter_pop_callback(void *ptr) { timeout_reset_button.set_flag_activated(0); }
 
 // END OF NEXTION TOUCH EVENT FUNCTIONS ****************************************
 
@@ -474,18 +471,19 @@ void nextion_setup() {
   nex_zyl_hauptluft.attachPush(nex_zyl_hauptluft_push_callback);
   // PAGE 2:
   nex_page_2.attachPush(nex_page_2_push_callback);
-  nex_button_slider_1_left.attachPush(nex_button_slider_1_left_push_callback);
-  nex_button_slider_1_right.attachPush(nex_button_slider_1_right_push_callback);
-  nex_button_reset_shorttime_counter.attachPush(nex_button_reset_shorttime_counter_push_callback);
-  nex_button_reset_shorttime_counter.attachPop(nex_button_reset_shorttime_counter_pop_callback);
-  // PAGE 3:
-  nex_page_3.attachPush(nex_page_3_push_callback);
   nex_button_1_left.attachPush(nex_button_1_left_push_callback);
   nex_button_1_right.attachPush(nex_button_1_right_push_callback);
   nex_button_2_left.attachPush(nex_button_2_left_push_callback);
   nex_button_2_right.attachPush(nex_button_2_right_push_callback);
   nex_button_3_left.attachPush(nex_button_3_left_push_callback);
   nex_button_3_right.attachPush(nex_button_3_right_push_callback);
+  nex_button_4_left.attachPush(nex_button_4_left_push_callback);
+  nex_button_4_right.attachPush(nex_button_4_right_push_callback);
+
+  // PAGE 3:
+  nex_page_3.attachPush(nex_page_3_push_callback);
+  nex_button_reset_shorttime_counter.attachPush(nex_button_reset_shorttime_counter_push_callback);
+  nex_button_reset_shorttime_counter.attachPop(nex_button_reset_shorttime_counter_pop_callback);
 
   // ---------------------------------------------------------------------------
 
@@ -598,7 +596,7 @@ void update_cycle_name() {
 
 void update_button_play_pause() {
   if (nex_state_machine_running != state_controller.machine_is_running()) {
-    toggle_ds_switch("bt0");
+    toggle_ds_switch("play");
     nex_state_machine_running = !nex_state_machine_running;
   }
 }
@@ -607,6 +605,14 @@ void update_button_step_auto() {
   if (nex_state_step_mode != state_controller.is_in_step_mode()) {
     toggle_ds_switch("bt1");
     nex_state_step_mode = state_controller.is_in_step_mode();
+  }
+}
+
+void update_force_display() {
+  if (nex_state_force_int != force_int) {
+    String suffixed_value = add_suffix_to_value(force_int, "N");
+    display_text_in_field(suffixed_value, "t2");
+    nex_state_force_int = force_int;
   }
 }
 
@@ -640,6 +646,10 @@ void display_loop_page_1_left_side() {
   update_button_play_pause();
 
   update_button_step_auto();
+
+  if (delay_force_update.delay_time_is_up(200)) {
+    update_force_display();
+  }
 
   show_error();
 
@@ -728,79 +738,7 @@ void display_loop_page_1_right_side() {
   update_button_hauptluft();
 }
 
-// DIPLAY LOOP PAGE 2 LEFT SIDE: -----------------------------------------------
-
-void update_force_display() {
-  if (nex_state_force_int != force_int) {
-    display_value_in_field(force_int, "h1");
-    String suffixed_value = add_suffix_to_value(force_int, "N");
-    display_text_in_field(suffixed_value, "t6");
-    nex_state_force_int = force_int;
-  }
-}
-
-void update_pressure_display() {
-  Serial2.print("t8.txt=");
-  Serial2.print("\"");
-  Serial2.print(pressure_float, 1);
-  Serial2.print(" bar");
-  Serial2.print("\"");
-  send_to_nextion();
-  nex_state_federdruck = pressure_float;
-}
-
-void update_startfuelldauer() {
-  if (nex_state_startfuelldauer != eeprom_counter.get_value(startfuelldauer)) {
-    int value = eeprom_counter.get_value(startfuelldauer);
-    String display_string = add_suffix_to_value(value, "ms");
-    display_text_in_field(display_string, "t4");
-    nex_state_startfuelldauer = eeprom_counter.get_value(startfuelldauer);
-  }
-}
-
-void display_loop_page_2_left_side() {
-
-  update_startfuelldauer();
-
-  if (delay_force_update.delay_time_is_up(200)) {
-    update_force_display();
-    update_pressure_display();
-  }
-}
-
-// DIPLAY LOOP PAGE 2 RIGHT SIDE: ----------------------------------------------
-
-void update_upper_counter_value() {
-  long value = eeprom_counter.get_value(longtime_counter);
-  if (nex_state_longtime_counter != value) {
-    display_text_in_field(String(value), "t10");
-    nex_state_longtime_counter = value;
-  }
-}
-
-void update_lower_counter_value() {
-  long value = eeprom_counter.get_value(shorttime_counter);
-  if (nex_state_shorttime_counter != value) {
-    display_text_in_field(String(value), "t12");
-    nex_state_shorttime_counter = value;
-  }
-}
-
-void reset_lower_counter_value() {
-  if (timeout_reset_button.is_marked_activated()) {
-    if (timeout_reset_button.has_timed_out()) {
-      eeprom_counter.set_value(longtime_counter, 0);
-    }
-  }
-}
-
-void display_loop_page_2_right_side() {
-  update_upper_counter_value();
-  update_lower_counter_value();
-  reset_lower_counter_value();
-}
-
-// DIPLAY LOOP PAGE 3: ---------------------------------------------------------
+// DIPLAY LOOP PAGE 2: ---------------------------------------------------------
 
 void update_number_of_cycles() {
   long value = eeprom_counter.get_value(cycles_in_a_row);
@@ -822,17 +760,73 @@ void update_cooldown_time() {
 
 void update_strap_feed_time() {
   long value = eeprom_counter.get_value(strap_eject_feed_time);
-  if (nex_state_strap_eject_feed_time != value) {
+  if (nex_state_feed_time != value) {
     String text = add_suffix_to_value(value, "s");
     display_text_in_field(text, "t7");
-    nex_state_strap_eject_feed_time = value;
+    nex_state_feed_time = value;
+  }
+}
+
+void update_startfuelldauer() {
+  if (nex_state_startfuelldauer != eeprom_counter.get_value(startfuelldauer)) {
+    int value = eeprom_counter.get_value(startfuelldauer);
+    String display_string = add_suffix_to_value(value, "ms");
+    display_text_in_field(display_string, "t9");
+    nex_state_startfuelldauer = eeprom_counter.get_value(startfuelldauer);
+  }
+}
+void update_pressure_display() {
+  Serial2.print("t10.txt=");
+  Serial2.print("\"");
+  Serial2.print(pressure_float, 1);
+  Serial2.print(" bar");
+  Serial2.print("\"");
+  send_to_nextion();
+  nex_state_federdruck = pressure_float;
+}
+
+void display_loop_page_2() {
+  update_number_of_cycles();
+  update_cooldown_time();
+  update_strap_feed_time();
+  update_startfuelldauer();
+
+  if (delay_force_update.delay_time_is_up(200)) {
+    update_pressure_display();
+  }
+}
+
+// DIPLAY LOOP PAGE 3: ---------------------------------------------------------
+
+void update_longtime_counter_value() {
+  long value = eeprom_counter.get_value(shorttime_counter);
+  if (nex_state_shorttime_counter != value) {
+    display_text_in_field(String(value), "t12");
+    nex_state_shorttime_counter = value;
+  }
+}
+
+void reset_longtime_counter_value() {
+  if (timeout_reset_button.is_marked_activated()) {
+    if (timeout_reset_button.has_timed_out()) {
+      eeprom_counter.set_value(longtime_counter, 0);
+    }
+  }
+}
+
+void update_shorttime_counter_value() {
+  long value = eeprom_counter.get_value(longtime_counter);
+  if (nex_state_longtime_counter != value) {
+    display_text_in_field(String(value), "t10");
+    nex_state_longtime_counter = value;
   }
 }
 
 void display_loop_page_3() {
-  update_number_of_cycles();
-  update_cooldown_time();
-  update_strap_feed_time();
+
+  update_longtime_counter_value();
+  reset_longtime_counter_value();
+  update_shorttime_counter_value();
 }
 
 // NEXTION MAIN LOOP: ----------------------------------------------------------
@@ -850,8 +844,7 @@ void nextion_loop() {
   // PAGE 2 --------------------------------------
   if (nex_current_page == 2) // START PAGE 2
   {
-    display_loop_page_2_left_side();
-    display_loop_page_2_right_side();
+    display_loop_page_2();
   }
 
   // PAGE 3 --------------------------------------

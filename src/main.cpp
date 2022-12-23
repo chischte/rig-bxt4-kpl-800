@@ -113,17 +113,39 @@ void clear_info_field();
 
 int Cycle_step::object_count = 0; // enable object counting
 std::vector<Cycle_step *> main_cycle_steps;
+void reset_flag_of_current_step() { main_cycle_steps[state_controller.get_current_step()]->reset_flags(); }
 
 // NON NEXTION FUNCTIONS *******************************************************
 
-void reset_flag_of_current_step() { main_cycle_steps[state_controller.get_current_step()]->reset_flags(); }
+// PNEUMATIC SPTING (800mm CYLINDER) -------------------------------------------
+
+void pneumatic_spring_vent() {
+  zyl_800_zuluft.set(0);
+  zyl_800_abluft.set(0);
+}
+void pneumatic_spring_move() {
+  zyl_800_zuluft.set(1);
+  zyl_800_abluft.set(0); // dont build up pressure
+}
+void pneumatic_spring_block() {
+  zyl_800_zuluft.set(0);
+  zyl_800_abluft.set(1);
+}
+
+void pneumatic_spring_build_pressure() {
+  zyl_800_zuluft.set(1);
+  zyl_800_abluft.set(1);
+}
+
+// -----------------------------------------------------------------------------
 
 void reset_cylinders() {
+
+  zyl_hauptluft.set(1);
   zyl_wippenhebel.set(0);
   zyl_spanntaste.set(0);
   zyl_schweisstaste.set(0);
-  zyl_800_zuluft.set(0);
-  zyl_800_abluft.set(0);
+  pneumatic_spring_vent();
 }
 
 void reset_state_controller() {
@@ -143,7 +165,7 @@ void reset_machine() {
 }
 
 void stop_machine() {
-  zyl_800_zuluft.set(0);
+  zyl_hauptluft.set(0);
   state_controller.set_step_mode();
   state_controller.set_machine_stop();
   reset_cylinders();
@@ -993,13 +1015,12 @@ class Startdruck : public Cycle_step {
 
   void do_initial_stuff() {
     delay_cycle_step.set_unstarted();
-    zyl_800_zuluft.set(1); // 1=füllen 0=geschlossen
-    zyl_800_abluft.set(1); // 1=geschlossen 0=entlüften
+    pneumatic_spring_build_pressure();
   };
 
   void do_loop_stuff() {
     if (delay_cycle_step.delay_time_is_up(eeprom_counter.get_value(startfuelldauer))) {
-      zyl_800_zuluft.set(0); // 1=füllen 0=geschlossen
+      pneumatic_spring_block();
       set_loop_completed();
     };
   };
@@ -1009,6 +1030,7 @@ class Spannen : public Cycle_step {
   String get_display_text() { return "SPANNEN"; }
 
   void do_initial_stuff() {
+    pneumatic_spring_block();
     zyl_spanntaste.set(1); // Spanntaste betätigen
     delay_cycle_step.set_unstarted();
   };
@@ -1044,8 +1066,7 @@ class Abkuehlen : public Cycle_step {
 
   void do_initial_stuff() {
     delay_cycle_step.set_unstarted();
-    zyl_800_zuluft.set(0); // 1=füllen 0=geschlossen
-    zyl_800_abluft.set(0); // 1=geschlossen 0=entlüften
+    pneumatic_spring_vent();
   };
   void do_loop_stuff() {
     if (pressure_float < 0.1) // warten bis der Druck abgebaut ist
@@ -1088,8 +1109,7 @@ class Zurueckfahren : public Cycle_step {
   String get_display_text() { return "ZURUECKFAHREN"; }
 
   void do_initial_stuff() {
-    zyl_800_zuluft.set(1); // 1=füllen 0=geschlossen
-    zyl_800_abluft.set(0); // 1=geschlossen 0=entlüften
+    pneumatic_spring_move();
     delay_cycle_step.set_unstarted();
   };
   void do_loop_stuff() {
@@ -1099,8 +1119,7 @@ class Zurueckfahren : public Cycle_step {
       set_loop_completed();
     };
     if (taster_startposition.get_raw_button_state()) {
-      zyl_800_zuluft.set(0); // 1=füllen 0=geschlossen
-      zyl_800_abluft.set(0); // 1=geschlossen 0=entlüften
+      pneumatic_spring_vent();
       if (pressure_float < 0.1) // warten bis der Druck abgebaut ist
       {
         if (delay_cycle_step.delay_time_is_up(500)) {

@@ -10,3 +10,6 @@
 [submodule "lib/debounce-library"]
 	path = lib/debounce-library
 	url = https://github.com/chischte/debounce-library
+[submodule "lib/ArduinoSTL"]
+	path = lib/ArduinoSTL
+	url = https://github.com/mike-matera/ArduinoSTL

@@ -1,6 +1,7 @@
 
 /*
  * *****************************************************************************
+ * *****************************************************************************
  * BXT4_KPL
  * *****************************************************************************
  * Program to control a test rig
@@ -8,10 +9,6 @@
  * Michael Wettstein
  * Dezember 2022, Zürich
  * *****************************************************************************
- * TODO:
- * Reset button soll auch Zylinder abstellen
- * Bug beheben auf Page 2 wird die bandvorschubdauer angezeigt oben rechts...
- * ...beim Wechsel von Seite 3 auf 2
  * *****************************************************************************
  */
 
@@ -303,6 +300,8 @@ void nex_page_1_push_callback(void *ptr) {
   nex_state_machine_running = 0;
   nex_state_zyl_hauptluft = 0;
   nex_state_force_int = -5;
+  nex_current_spinner_pos = 1;
+  nex_current_tacho_pos = 0;
 }
 
 void nex_page_2_push_callback(void *ptr) {
@@ -324,10 +323,13 @@ void nex_page_3_push_callback(void *ptr) {
 
 // TOUCH EVENT FUNCTIONS PAGE 1 - LEFT SIDE ------------------------------------
 
-void nex_button_play_pause_push_callback(void *ptr) {
+void nex_button_play_pause_push_callback(void *ptr) { //
   state_controller.toggle_machine_running_state();
   nex_state_machine_running = !nex_state_machine_running;
 }
+
+void nex_button_play_pause_pop_callback(void *ptr) {}
+
 void nex_button_mode_push_callback(void *ptr) {
   state_controller.toggle_step_auto_mode();
   nex_state_step_mode = state_controller.is_in_step_mode();
@@ -468,6 +470,7 @@ void nextion_setup() {
   nex_button_stepnxt.attachPush(nex_button_stepnxt_push_callback);
   nex_button_mode.attachPush(nex_button_mode_push_callback);
   nex_button_play_pause.attachPush(nex_button_play_pause_push_callback);
+  nex_button_play_pause.attachPop(nex_button_play_pause_pop_callback);
   // PAGE 1 - RIGHT SIDE:
   nex_zyl_klemmblock.attachPush(nex_zyl_klemmblock_push_callback);
   nex_zyl_800_zuluft.attachPush(nex_zyl_800_zuluft_push_callback);
@@ -607,7 +610,7 @@ void display_pic_in_field(String picture, String textField) {
 }
 
 void reset_spinner_picture() { //
-  current_spinner_pos = spinner_pics_array[0];
+  current_spinner_pos = 0;
 }
 
 void update_spinner_picture() {
@@ -623,7 +626,7 @@ void select_next_spinner_pic() {
   int max_spinner_pic_pos = number_of_spinner_pics - 1;
 
   current_spinner_pos++;
-  if (current_spinner_pos == max_spinner_pic_pos) {
+  if (current_spinner_pos >= max_spinner_pic_pos) {
     current_spinner_pos = 1;
   }
 }
@@ -646,13 +649,14 @@ void update_tacho_picture() {
 }
 
 int get_tacho_pos_from_pressure() {
+
   int number_of_tacho_pics = sizeof(tacho_pics_array) / sizeof(int);
   int max_tacho_pic_number = number_of_tacho_pics - 1;
 
   float force_fraction = float(force_int) / max_tool_force;
   int array_position = int(round(force_fraction * float(max_tacho_pic_number)));
 
-  if (array_position > max_tacho_pic_number) {
+  if (array_position >= max_tacho_pic_number) {
     array_position = max_tacho_pic_number;
   }
 
@@ -682,7 +686,7 @@ void update_cycle_name() {
 void update_button_play_pause() {
   if (nex_state_machine_running != state_controller.machine_is_running()) {
     toggle_ds_switch("play");
-    nex_state_machine_running = !nex_state_machine_running;
+    nex_state_machine_running = state_controller.machine_is_running();
   }
 }
 
@@ -773,7 +777,7 @@ void update_button_wippenhebel() {
   if (zyl_wippenhebel.get_state() != nex_state_zyl_wippenhebel) {
     bool state = zyl_wippenhebel.get_state();
     set_momentary_button_high_or_low("b5", state);
-    nex_state_zyl_wippenhebel = zyl_wippenhebel.get_state();
+    nex_state_zyl_wippenhebel = state;
   }
 }
 
@@ -781,7 +785,7 @@ void update_button_spanntaste() {
   if (zyl_spanntaste.get_state() != nex_state_zyl_spanntaste) {
     bool state = zyl_spanntaste.get_state();
     set_momentary_button_high_or_low("b4", state);
-    nex_state_zyl_spanntaste = zyl_spanntaste.get_state();
+    nex_state_zyl_spanntaste = state;
   }
 }
 
@@ -789,7 +793,7 @@ void update_button_messer() {
   if (zyl_block_messer.get_state() != nex_state_zyl_messer) {
     bool state = zyl_block_messer.get_state();
     set_momentary_button_high_or_low("b6", state);
-    nex_state_zyl_messer = zyl_block_messer.get_state();
+    nex_state_zyl_messer = state;
   }
 }
 
@@ -805,7 +809,7 @@ void update_button_schweissen() {
   if (zyl_schweisstaste.get_state() != nex_state_zyl_schweisstaste) {
     bool state = zyl_schweisstaste.get_state();
     set_momentary_button_high_or_low("b3", state);
-    nex_state_zyl_schweisstaste = zyl_schweisstaste.get_state();
+    nex_state_zyl_schweisstaste = state;
   }
 }
 
@@ -1418,9 +1422,9 @@ void loop() {
   } else {
     spinner_is_running = false;
   }
-}
 
-// MEASURE CYCLE TIME
-// runtime = millis() - runtime_stopwatch;
-// Serial.println(runtime);
-// runtime_stopwatch = millis();
+  // // MEASURE CYCLE TIME
+  // runtime = micros() - runtime_stopwatch;
+  // Serial.println(runtime);
+  // runtime_stopwatch = micros();
+}

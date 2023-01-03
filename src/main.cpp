@@ -30,7 +30,11 @@
 // !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
 // !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
 // !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
+//                                                                        |
 bool is_in_display_debug_mode = true; // MUST BE FALSE IN PRODUCTION !!!<-|
+//                                                                        |
+int max_tool_force = 2500; // [N] / 260er->2500 / 450er->4500 ------------|
+//                                                                        |
 // !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
 // !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
 // !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!------------|
@@ -174,11 +178,11 @@ void stop_machine() {
 
 // NEXTION VARIABLES -----------------------------------------------------------
 int nex_current_page;
-bool force_simulation_is_running;
-int tacho_simulation_picture_array[5] = {22, 23, 24, 25, 26}; // 0-4
+bool spinner_is_running;
+int spinner_pics_array[5] = {22, 23, 24, 25, 26}; // 0-4
 
-byte nex_tacho_simulated_force_level;
-byte simulated_force_level;
+byte nex_tacho_current_spinner_pic;
+byte current_spinner_pic;
 
 // NEXTION SWITCH STATES LIST --------------------------------------------------
 // Every nextion switch button (dualstate) needs a switchstate variable to
@@ -584,7 +588,7 @@ void set_momentary_button_high_or_low(String button, bool state) {
 
 // DISPLAY LOOP PAGE 1 LEFT SIDE: ----------------------------------------------
 
-void display_picture_in_field(String picture, String textField) {
+void display_pic_in_field(String picture, String textField) {
   Serial2.print(textField);
   Serial2.print(".pic=");
   Serial2.print(picture);
@@ -596,54 +600,29 @@ void display_picture_in_field(String picture, String textField) {
   send_to_nextion();
 }
 
-void update_simulation_tacho_force() {
-  String picture = String(tacho_simulation_picture_array[simulated_force_level]);
-  display_picture_in_field(picture, "spinner");
-  // Bring elements to front:
-  sendCommand("vis t_unit,1");
-  sendCommand("vis t_force,1");
-}
-
-void update_simulation_tacho() {
-  if (nex_tacho_simulated_force_level != simulated_force_level) {
-    update_simulation_tacho_force();
-    nex_tacho_simulated_force_level = simulated_force_level;
+void update_spinner_picture() {
+  if (nex_tacho_current_spinner_pic != current_spinner_pic) {
+    String picture = String(spinner_pics_array[current_spinner_pic]);
+    display_pic_in_field(picture, "spinner");
+    nex_tacho_current_spinner_pic = current_spinner_pic;
   }
 }
 
-void increase_simulated_force() {
-  int number_of_forces = sizeof(tacho_simulation_picture_array) / sizeof(int);
-  int max_force_level = number_of_forces - 1;
-  static bool force_simulation_completed = false;
+void select_next_spinner_pic() {
+  int number_of_spinner_pics = sizeof(spinner_pics_array) / sizeof(int);
+  int max_spinner_pic_number = number_of_spinner_pics - 1;
 
-  // Increase force while button is pushed:
-  if (simulation_step_timeout.is_marked_activated() && simulated_force_level < max_force_level) {
-    simulated_force_level++;
-  }
-  // Show final level:
-  else if (simulated_force_level == max_force_level) {
-    simulated_force_level = 1;
-  }
-  // Switch to time simulation:
-  else if (force_simulation_completed) {
-    simulated_force_level = 0;
-    force_simulation_completed = false;
-    force_simulation_is_running = false;
-    // sendCommand("vis t_force,0");
-    // sendCommand("vis t_unit,0");
-    // sendCommand("vis t_mode,0");
+  current_spinner_pic++;
+  if (current_spinner_pic == max_spinner_pic_number) {
+    current_spinner_pic = 1;
   }
 }
 
-void simulate_tool_cycle() {
-
-  // Force simulation:
-  if (force_simulation_is_running) {
+void run_spinner() {
+  if (spinner_is_running) {
     if (simulation_step_timeout.has_timed_out()) {
-      if (force_simulation_is_running) {
-        increase_simulated_force();
-        simulation_step_timeout.reset_time();
-      }
+      select_next_spinner_pic();
+      simulation_step_timeout.reset_time();
     }
   }
 }
@@ -711,8 +690,9 @@ void show_remaining_pause_time() {
 
 void display_loop_page_1_left_side() {
 
-  simulate_tool_cycle();
-  update_simulation_tacho();
+  update_spinner_picture();
+
+  run_spinner();
 
   update_cycle_name();
 
@@ -1396,10 +1376,9 @@ void loop() {
 
   // RUN SPINNER:
   if (state_controller.machine_is_running()) {
-    force_simulation_is_running = true;
-    simulation_step_timeout.set_flag_activated(1);
+    spinner_is_running = true;
   } else {
-    force_simulation_is_running = false;
+    spinner_is_running = false;
   }
 }
 

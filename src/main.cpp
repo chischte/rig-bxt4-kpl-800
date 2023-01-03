@@ -62,10 +62,11 @@ Cylinder zyl_block_messer(CONTROLLINO_D6);
 Cylinder zyl_block_klemmrad(CONTROLLINO_D8);
 Cylinder zyl_block_foerdermotor(CONTROLLINO_R5);
 
-Insomnia simulation_step_timeout(500);
+Insomnia spinner_step_timeout(500);
 Insomnia delay_cycle_step;
 Insomnia delay_long_pause;
 Insomnia delay_force_update;
+Insomnia delay_tacho_update;
 
 Insomnia timeout_machine_stopped(10000);
 Insomnia timeout_reset_button(5000); // pushtime to reset counter
@@ -113,6 +114,7 @@ void display_text_in_field(String text, String text_field);
 void send_to_nextion();
 void clear_text_field(String text_field);
 void clear_info_field();
+void reset_spinner_picture();
 
 // CREATE VECTOR CONTAINER FOR THE CYCLE STEPS OBJECTS *************************
 
@@ -159,6 +161,7 @@ void reset_state_controller() {
   reset_flag_of_current_step();
   state_controller.set_current_step_to(0);
   reset_flag_of_current_step();
+  reset_spinner_picture();
 }
 
 void reset_machine() {
@@ -180,9 +183,12 @@ void stop_machine() {
 int nex_current_page;
 bool spinner_is_running;
 int spinner_pics_array[5] = {22, 23, 24, 25, 26}; // 0-4
+int tacho_pics_array[12] = {21, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37}; //0-11
 
-byte nex_tacho_current_spinner_pic;
-byte current_spinner_pic;
+byte nex_current_spinner_pos;
+byte current_spinner_pos;
+byte nex_current_tacho_pos;
+byte current_tacho_pos;
 
 // NEXTION SWITCH STATES LIST --------------------------------------------------
 // Every nextion switch button (dualstate) needs a switchstate variable to
@@ -600,32 +606,62 @@ void display_pic_in_field(String picture, String textField) {
   send_to_nextion();
 }
 
+void reset_spinner_picture() { //
+  current_spinner_pos = spinner_pics_array[0];
+}
+
 void update_spinner_picture() {
-  if (nex_tacho_current_spinner_pic != current_spinner_pic) {
-    String picture = String(spinner_pics_array[current_spinner_pic]);
+  if (nex_current_spinner_pos != current_spinner_pos) {
+    String picture = String(spinner_pics_array[current_spinner_pos]);
     display_pic_in_field(picture, "spinner");
-    nex_tacho_current_spinner_pic = current_spinner_pic;
+    nex_current_spinner_pos = current_spinner_pos;
   }
 }
 
 void select_next_spinner_pic() {
   int number_of_spinner_pics = sizeof(spinner_pics_array) / sizeof(int);
-  int max_spinner_pic_number = number_of_spinner_pics - 1;
+  int max_spinner_pic_pos = number_of_spinner_pics - 1;
 
-  current_spinner_pic++;
-  if (current_spinner_pic == max_spinner_pic_number) {
-    current_spinner_pic = 1;
+  current_spinner_pos++;
+  if (current_spinner_pos == max_spinner_pic_pos) {
+    current_spinner_pos = 1;
   }
 }
 
 void run_spinner() {
   if (spinner_is_running) {
-    if (simulation_step_timeout.has_timed_out()) {
+    if (spinner_step_timeout.has_timed_out()) {
       select_next_spinner_pic();
-      simulation_step_timeout.reset_time();
+      spinner_step_timeout.reset_time();
     }
   }
 }
+
+void update_tacho_picture() {
+  if (nex_current_tacho_pos != current_tacho_pos) {
+    String picture = String(tacho_pics_array[current_tacho_pos]);
+    display_pic_in_field(picture, "force");
+    nex_current_tacho_pos = current_tacho_pos;
+  }
+}
+
+int get_tacho_pos_from_pressure() {
+  int number_of_tacho_pics = sizeof(tacho_pics_array) / sizeof(int);
+  int max_tacho_pic_number = number_of_tacho_pics - 1;
+
+  float force_fraction = float(force_int) / max_tool_force;
+  int array_position = int(round(force_fraction * float(max_tacho_pic_number)));
+
+  if (array_position > max_tacho_pic_number) {
+    array_position = max_tacho_pic_number;
+  }
+
+  return array_position;
+}
+
+void run_tacho() { //
+  current_tacho_pos = get_tacho_pos_from_pressure();
+};
 
 String get_main_cycle_display_string() {
   int current_step = state_controller.get_current_step();
@@ -690,19 +726,20 @@ void show_remaining_pause_time() {
 
 void display_loop_page_1_left_side() {
 
+  run_spinner();
   update_spinner_picture();
 
-  run_spinner();
+  if (delay_tacho_update.delay_time_is_up(200)) {
+    run_tacho();
+    update_tacho_picture();
+    update_force_display();
+  }
 
   update_cycle_name();
 
   update_button_play_pause();
 
   update_button_step_auto();
-
-  if (delay_force_update.delay_time_is_up(200)) {
-    update_force_display();
-  }
 
   show_error();
 
@@ -934,7 +971,6 @@ float calm_measurement(float pressure_float) {
   static float pressure_sum;
   static float pressure_calmed;
   static float prev_pressure_calmed;
-  static float min_difference = 0.05; // [bar]
 
   // Pressure seems to rise:
   if (pressure_float > pressure_calmed) {
@@ -960,8 +996,10 @@ float calm_measurement(float pressure_float) {
       pressure_sum = 0;
     }
   }
+
   if (fabs(calmcounter) >= 5) //
   {
+    static float min_difference = 0.00; // [bar]
     // Update value only if there is a significant difference to the previous
     // value:
     if (fabs(pressure_sum / fabs(calmcounter) - prev_pressure_calmed) > min_difference) {

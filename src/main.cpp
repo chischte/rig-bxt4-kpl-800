@@ -28,7 +28,7 @@
 // !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!--------------|
 // !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!--------------|
 //                                                                          |
-bool is_in_display_debug_mode = true; // MUST BE FALSE IN PRODUCTION !!!<--|
+bool is_in_display_debug_mode = false; // MUST BE FALSE IN PRODUCTION !!!<--|
 //                                                                          |
 int max_tool_force = 2500; // [N] / 260er->2500 / 450er->4500 --------------|
 //                                                                          |
@@ -64,8 +64,10 @@ Insomnia delay_cycle_step;
 Insomnia delay_long_pause;
 Insomnia delay_force_update;
 Insomnia delay_tacho_update;
+Insomnia delay_minimum_filltime;
+Insomnia delay_minimum_waittime;
 
-Insomnia timeout_machine_stopped(10000);
+Insomnia timeout_machine_stopped(15000);
 Insomnia timeout_reset_button(5000); // pushtime to reset counter
 
 State_controller state_controller;
@@ -149,6 +151,9 @@ void reset_cylinders() {
   zyl_wippenhebel.set(0);
   zyl_spanntaste.set(0);
   zyl_schweisstaste.set(0);
+  zyl_block_klemmrad.set(0);
+  zyl_block_messer.set(0);
+  zyl_block_foerdermotor.set(0);
   pneumatic_spring_vent();
 }
 
@@ -353,10 +358,12 @@ void nex_button_reset_machine_push_callback(void *ptr) { reset_machine(); }
 // TOUCH EVENT FUNCTIONS PAGE 1 - RIGHT SIDE -----------------------------------
 
 void nex_zyl_800_zuluft_push_callback(void *ptr) {
-  zyl_800_zuluft.toggle();
+  zyl_800_zuluft.set(1);
   nex_state_zyl_800_zuluft = !nex_state_zyl_800_zuluft;
 }
-void nex_zyl_800_zuluft_pop_callback(void *ptr) {}
+void nex_zyl_800_zuluft_pop_callback(void *ptr) { //
+  zyl_800_zuluft.set(0);
+}
 
 void nex_zyl_800_abluft_push_callback(void *ptr) {
   zyl_800_abluft.toggle();
@@ -1105,14 +1112,34 @@ class Festklemmen : public Cycle_step {
 // -----------------------------------------------------------------------------
 class Startdruck : public Cycle_step {
   String get_display_text() { return "STARTDRUCK"; }
+  byte is_full_counter = 0;
+  int minimum_inflation = 20; // [N]
 
   void do_initial_stuff() {
     delay_cycle_step.set_unstarted();
-    pneumatic_spring_build_pressure();
+    is_full_counter = 0;
   };
 
   void do_loop_stuff() {
-    if (force_int >= eeprom_counter.get_value(startfuelldruck)) {
+
+    // Build pressure after minmum wait time
+    if (force_int + minimum_inflation <= eeprom_counter.get_value(startfuelldruck)) {
+      if (delay_minimum_waittime.delay_time_is_up(500)) {
+        pneumatic_spring_build_pressure();
+        delay_minimum_filltime.reset_time();
+        is_full_counter = 0;
+      }
+    }
+    // Stop building pressure after minmum filltime
+    else {
+      if (delay_minimum_filltime.delay_time_is_up(100)) {
+        pneumatic_spring_block();
+        delay_minimum_waittime.reset_time();
+        is_full_counter++;
+      }
+    }
+
+    if (is_full_counter >= 20) {
       pneumatic_spring_block();
       set_loop_completed();
     };

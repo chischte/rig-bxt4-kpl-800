@@ -28,7 +28,7 @@
 // !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!--------------|
 // !!!!!!!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!--------------|
 //                                                                          |
-bool is_in_display_debug_mode = false; // MUST BE FALSE IN PRODUCTION !!!<--|
+bool is_in_display_debug_mode = true; // MUST BE FALSE IN PRODUCTION !!!<--|
 //                                                                          |
 int max_tool_force = 2500; // [N] / 260er->2500 / 450er->4500 --------------|
 //                                                                          |
@@ -434,9 +434,9 @@ void nex_button_2_left_push_callback(void *ptr) { decrease_slider_value(long_coo
 
 void nex_button_2_right_push_callback(void *ptr) { increase_slider_value(long_cooldown_time, 600, 10); }
 
-void nex_button_3_left_push_callback(void *ptr) { decrease_slider_value(strap_eject_feed_time, 0, 1); }
+void nex_button_3_left_push_callback(void *ptr) { decrease_slider_value(strap_eject_feed_time, 0, 100); }
 
-void nex_button_3_right_push_callback(void *ptr) { increase_slider_value(strap_eject_feed_time, 20, 1); }
+void nex_button_3_right_push_callback(void *ptr) { increase_slider_value(strap_eject_feed_time, 2000, 100); }
 
 void nex_button_4_left_push_callback(void *ptr) { decrease_slider_value(startfuelldruck, 0, 100); }
 
@@ -860,7 +860,7 @@ void update_cooldown_time() {
 void update_strap_feed_time() {
   long value = eeprom_counter.get_value(strap_eject_feed_time);
   if (nex_state_feed_time != value) {
-    String text = add_suffix_to_value(value, "s");
+    String text = add_suffix_to_value(value, "ms");
     display_text_in_field(text, "t7");
     nex_state_feed_time = value;
   }
@@ -1060,7 +1060,7 @@ class Vorschieben : public Cycle_step {
   long feed_time;
 
   void do_initial_stuff() {
-    feed_time = eeprom_counter.get_value(strap_eject_feed_time) * 1000;
+    feed_time = eeprom_counter.get_value(strap_eject_feed_time);
     delay_cycle_step.set_unstarted();
     zyl_wippenhebel.set(1);
     zyl_block_klemmrad.set(1);

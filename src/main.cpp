@@ -368,9 +368,14 @@ void nex_zyl_klemmblock_push_callback(void *ptr) {
   nex_state_zyl_klemmblock = !nex_state_zyl_klemmblock;
 }
 
-void nex_zyl_wippenhebel_push_callback(void *ptr) { zyl_wippenhebel.set(1); }
+void nex_zyl_wippenhebel_push_callback(void *ptr) {
+  zyl_wippenhebel.toggle();
+  nex_state_zyl_wippenhebel = 1;
+}
 
-void nex_zyl_wippenhebel_pop_callback(void *ptr) { zyl_wippenhebel.set(0); }
+void nex_zyl_wippenhebel_pop_callback(void *ptr) { //
+  nex_state_zyl_wippenhebel = 0;
+}
 
 void nex_zyl_spanntaste_push_callback(void *ptr) { zyl_spanntaste.set(1); }
 
@@ -1284,7 +1289,7 @@ void setup() {
 
   state_controller.set_step_mode();
 
-  zyl_hauptluft.set(1); // Hauptluftventil öffnen
+  zyl_hauptluft.set(0); // Hauptluftventil nicht öffnen
 
   zyl_tool_niederhalter.set(1);
 

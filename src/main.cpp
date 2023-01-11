@@ -90,7 +90,7 @@ int force_int;
 
 // SET UP EEPROM COUNTER ********************************************************
 enum eeprom_counter {
-  startfuelldauer,
+  startfuelldruck,
   shorttime_counter,
   longtime_counter,
   cycles_in_a_row,
@@ -210,7 +210,7 @@ long nex_state_long_cooldown_time;
 long nex_state_feed_time;
 long nex_state_shorttime_counter;
 long nex_state_longtime_counter;
-long nex_state_startfuelldauer;
+long nex_state_startfuelldruck;
 long nex_state_restpausenzeit;
 long button_push_stopwatch;
 float nex_state_federdruck;
@@ -310,7 +310,7 @@ void nex_page_2_push_callback(void *ptr) {
   nex_state_cycles_in_a_row = 0;
   nex_state_long_cooldown_time = 0;
   nex_state_feed_time = 0;
-  nex_state_startfuelldauer = 0;
+  nex_state_startfuelldruck = 0;
   nex_state_federdruck = 10000;
 }
 
@@ -438,9 +438,9 @@ void nex_button_3_left_push_callback(void *ptr) { decrease_slider_value(strap_ej
 
 void nex_button_3_right_push_callback(void *ptr) { increase_slider_value(strap_eject_feed_time, 20, 1); }
 
-void nex_button_4_left_push_callback(void *ptr) { decrease_slider_value(startfuelldauer, 0, 100); }
+void nex_button_4_left_push_callback(void *ptr) { decrease_slider_value(startfuelldruck, 0, 100); }
 
-void nex_button_4_right_push_callback(void *ptr) { increase_slider_value(startfuelldauer, 7000, 100); }
+void nex_button_4_right_push_callback(void *ptr) { increase_slider_value(startfuelldruck, 3000, 100); }
 
 // TOUCH EVENT FUNCTIONS PAGE 3 ------------------------------------------------
 
@@ -866,12 +866,12 @@ void update_strap_feed_time() {
   }
 }
 
-void update_startfuelldauer() {
-  if (nex_state_startfuelldauer != eeprom_counter.get_value(startfuelldauer)) {
-    int value = eeprom_counter.get_value(startfuelldauer);
-    String display_string = add_suffix_to_value(value, "ms");
+void update_startfuelldruck() {
+  if (nex_state_startfuelldruck != eeprom_counter.get_value(startfuelldruck)) {
+    int value = eeprom_counter.get_value(startfuelldruck);
+    String display_string = add_suffix_to_value(value, "N");
     display_text_in_field(display_string, "t9");
-    nex_state_startfuelldauer = eeprom_counter.get_value(startfuelldauer);
+    nex_state_startfuelldruck = eeprom_counter.get_value(startfuelldruck);
   }
 }
 void update_pressure_display() {
@@ -888,7 +888,7 @@ void display_loop_page_2() {
   update_number_of_cycles();
   update_cooldown_time();
   update_strap_feed_time();
-  update_startfuelldauer();
+  update_startfuelldruck();
 
   if (delay_force_update.delay_time_is_up(200)) {
     update_pressure_display();
@@ -1069,7 +1069,7 @@ class Vorschieben : public Cycle_step {
   void do_loop_stuff() {
     if (delay_cycle_step.delay_time_is_up(feed_time)) {
       zyl_wippenhebel.set(0);
-      zyl_block_klemmrad.set(0);
+      // zyl_block_klemmrad.set(0);
       zyl_block_foerdermotor.set(0);
       set_loop_completed();
     }
@@ -1112,7 +1112,7 @@ class Startdruck : public Cycle_step {
   };
 
   void do_loop_stuff() {
-    if (delay_cycle_step.delay_time_is_up(eeprom_counter.get_value(startfuelldauer))) {
+    if (force_int >= eeprom_counter.get_value(startfuelldruck)) {
       pneumatic_spring_block();
       set_loop_completed();
     };
@@ -1125,6 +1125,7 @@ class Spannen : public Cycle_step {
   void do_initial_stuff() {
     pneumatic_spring_block();
     zyl_spanntaste.set(1); // Spanntaste betätigen
+    zyl_block_klemmrad.set(0);
     delay_cycle_step.set_unstarted();
   };
   void do_loop_stuff() {
@@ -1155,10 +1156,11 @@ class Schweissen : public Cycle_step {
 // -----------------------------------------------------------------------------
 // Abkühlen und Druck abbauen
 class Abkuehlen : public Cycle_step {
-  String get_display_text() { return "ABKUEHLEN"; }
+  String get_display_text() { return "ENTLUEFTEN"; }
 
   void do_initial_stuff() {
     delay_cycle_step.set_unstarted();
+    zyl_block_klemmrad.set(1);
     pneumatic_spring_vent();
   };
   void do_loop_stuff() {

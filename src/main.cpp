@@ -638,7 +638,7 @@ void select_next_spinner_pic() {
   int max_spinner_pic_pos = number_of_spinner_pics - 1;
 
   current_spinner_pos++;
-  if (current_spinner_pos >= max_spinner_pic_pos) {
+  if (current_spinner_pos > max_spinner_pic_pos) {
     current_spinner_pos = 1;
   }
 }

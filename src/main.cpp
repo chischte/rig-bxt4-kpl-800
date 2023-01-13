@@ -1105,7 +1105,7 @@ class Stirzel : public Cycle_step {
     delay_cycle_step.set_unstarted();
   };
   void do_loop_stuff() {
-    if (delay_cycle_step.delay_time_is_up(500)) {
+    if (delay_cycle_step.delay_time_is_up(300)) {
       zyl_block_klemmrad.set(0);
       zyl_block_foerdermotor.set(0);
       set_loop_completed();

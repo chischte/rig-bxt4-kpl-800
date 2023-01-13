@@ -50,7 +50,7 @@ Debounce taster_endposition(CONTROLLINO_A3);
 Cylinder zyl_hauptluft(CONTROLLINO_D7);
 Cylinder zyl_800_abluft(CONTROLLINO_D1);
 Cylinder zyl_800_zuluft(CONTROLLINO_D0);
-Cylinder zyl_klemmblock(CONTROLLINO_D2);
+Cylinder zyl_startklemme(CONTROLLINO_D2);
 Cylinder zyl_wippenhebel(CONTROLLINO_D5);
 Cylinder zyl_spanntaste(CONTROLLINO_D3);
 Cylinder zyl_schweisstaste(CONTROLLINO_D4);
@@ -200,7 +200,7 @@ byte current_tacho_pos;
 bool nex_state_zyl_hauptluft;
 bool nex_state_zyl_800_zuluft;
 bool nex_state_zyl_800_abluft;
-bool nex_state_zyl_klemmblock;
+bool nex_state_zyl_startklemme;
 bool nex_state_zyl_wippenhebel;
 bool nex_state_zyl_spanntaste;
 bool nex_state_zyl_messer;
@@ -237,7 +237,7 @@ NexDSButton nex_button_mode = NexDSButton(1, 4, "bt1");
 // PAGE 1 - RIGHT SIDE
 NexDSButton nex_zyl_800_zuluft = NexDSButton(1, 13, "bt5");
 NexDSButton nex_zyl_800_abluft = NexDSButton(1, 12, "bt4");
-NexDSButton nex_zyl_klemmblock = NexDSButton(1, 11, "bt3");
+NexDSButton nex_zyl_startklemme = NexDSButton(1, 11, "bt3");
 NexButton nex_zyl_wippenhebel = NexButton(1, 10, "b5");
 NexButton nex_zyl_spanntaste = NexButton(1, 9, "b4");
 NexButton nex_zyl_schweisstaste = NexButton(1, 8, "b3");
@@ -272,7 +272,7 @@ NexTouch *nex_listen_list[] = {
     &nex_page_1, &nex_button_stepback, &nex_button_stepnxt, &nex_button_reset_machine, &nex_button_play_pause,
     &nex_button_mode,
     // PAGE 1 - RIGHT SIDE:
-    &nex_zyl_foerdern, &nex_zyl_messer, &nex_zyl_klemmblock, &nex_zyl_800_zuluft, &nex_zyl_800_abluft,
+    &nex_zyl_foerdern, &nex_zyl_messer, &nex_zyl_startklemme, &nex_zyl_800_zuluft, &nex_zyl_800_abluft,
     &nex_zyl_wippenhebel, &nex_zyl_spanntaste, &nex_zyl_schweisstaste, &nex_zyl_hauptluft,
     // PAGE 2:
     &nex_page_2, &nex_button_1_left, &nex_button_1_right, &nex_button_2_left, &nex_button_2_right, &nex_button_3_left,
@@ -296,7 +296,7 @@ void nex_page_1_push_callback(void *ptr) {
   nex_state_error_message = "INFO";
   nex_state_zyl_800_zuluft = 0;
   nex_state_zyl_800_abluft = 1; // INVERTED VALVE LOGIC
-  nex_state_zyl_klemmblock = 0;
+  nex_state_zyl_startklemme = 0;
   nex_state_zyl_wippenhebel = 0;
   nex_state_zyl_spanntaste = 0;
   nex_state_zyl_messer = 0;
@@ -370,9 +370,9 @@ void nex_zyl_800_abluft_push_callback(void *ptr) {
   nex_state_zyl_800_abluft = !nex_state_zyl_800_abluft;
 }
 
-void nex_zyl_klemmblock_push_callback(void *ptr) {
-  zyl_klemmblock.toggle();
-  nex_state_zyl_klemmblock = !nex_state_zyl_klemmblock;
+void nex_zyl_startklemme_push_callback(void *ptr) {
+  zyl_startklemme.toggle();
+  nex_state_zyl_startklemme = !nex_state_zyl_startklemme;
 }
 
 void nex_zyl_wippenhebel_push_callback(void *ptr) {
@@ -484,11 +484,11 @@ void nextion_setup() {
   nex_button_play_pause.attachPush(nex_button_play_pause_push_callback);
   nex_button_play_pause.attachPop(nex_button_play_pause_pop_callback);
   // PAGE 1 - RIGHT SIDE:
-  nex_zyl_klemmblock.attachPush(nex_zyl_klemmblock_push_callback);
+  nex_zyl_startklemme.attachPush(nex_zyl_startklemme_push_callback);
   nex_zyl_800_zuluft.attachPush(nex_zyl_800_zuluft_push_callback);
   nex_zyl_800_zuluft.attachPop(nex_zyl_800_zuluft_pop_callback);
   nex_zyl_800_abluft.attachPush(nex_zyl_800_abluft_push_callback);
-  nex_zyl_klemmblock.attachPush(nex_zyl_klemmblock_push_callback);
+  nex_zyl_startklemme.attachPush(nex_zyl_startklemme_push_callback);
   nex_zyl_wippenhebel.attachPush(nex_zyl_wippenhebel_push_callback);
   nex_zyl_wippenhebel.attachPop(nex_zyl_wippenhebel_pop_callback);
   nex_zyl_spanntaste.attachPush(nex_zyl_spanntaste_push_callback);
@@ -779,9 +779,9 @@ void update_button_abluft_800() {
 }
 
 void update_button_klemmblock() {
-  if (zyl_klemmblock.get_state() != nex_state_zyl_klemmblock) {
+  if (zyl_startklemme.get_state() != nex_state_zyl_startklemme) {
     toggle_ds_switch("bt3");
-    nex_state_zyl_klemmblock = !nex_state_zyl_klemmblock;
+    nex_state_zyl_startklemme = !nex_state_zyl_startklemme;
   }
 }
 
@@ -1096,11 +1096,28 @@ class Schneiden : public Cycle_step {
   };
 };
 // -----------------------------------------------------------------------------
+class Stirzel : public Cycle_step {
+  String get_display_text() { return "STIRZEL"; }
+
+  void do_initial_stuff() {
+    zyl_block_klemmrad.set(1);
+    zyl_block_foerdermotor.set(1);
+    delay_cycle_step.set_unstarted();
+  };
+  void do_loop_stuff() {
+    if (delay_cycle_step.delay_time_is_up(500)) {
+      zyl_block_klemmrad.set(0);
+      zyl_block_foerdermotor.set(0);
+      set_loop_completed();
+    }
+  };
+};
+// -----------------------------------------------------------------------------
 class Festklemmen : public Cycle_step {
   String get_display_text() { return "FESTKLEMMEN"; }
 
   void do_initial_stuff() {
-    zyl_klemmblock.set(1);
+    zyl_startklemme.set(1);
     delay_cycle_step.set_unstarted();
   };
   void do_loop_stuff() {
@@ -1187,7 +1204,7 @@ class Abkuehlen : public Cycle_step {
 
   void do_initial_stuff() {
     delay_cycle_step.set_unstarted();
-    zyl_block_klemmrad.set(1);
+    zyl_block_klemmrad.set(0);
     pneumatic_spring_vent();
   };
   void do_loop_stuff() {
@@ -1196,20 +1213,6 @@ class Abkuehlen : public Cycle_step {
       if (delay_cycle_step.delay_time_is_up(4000)) { // Restluft kann entweichen
         set_loop_completed();
       }
-    }
-  };
-};
-// -----------------------------------------------------------------------------
-class Entspannen : public Cycle_step {
-  String get_display_text() { return "ENTSPANNEN"; }
-
-  void do_initial_stuff() {
-    delay_cycle_step.set_unstarted();
-    zyl_klemmblock.set(0);
-  };
-  void do_loop_stuff() {
-    if (delay_cycle_step.delay_time_is_up(500)) {
-      set_loop_completed();
     }
   };
 };
@@ -1227,6 +1230,21 @@ class Wippenhebel : public Cycle_step {
   };
 };
 // -----------------------------------------------------------------------------
+class Entspannen : public Cycle_step {
+  String get_display_text() { return "ENTSPANNEN"; }
+
+  void do_initial_stuff() {
+    delay_cycle_step.set_unstarted();
+    zyl_startklemme.set(0);
+  };
+  void do_loop_stuff() {
+    if (delay_cycle_step.delay_time_is_up(500)) {
+      set_loop_completed();
+    }
+  };
+};
+// -----------------------------------------------------------------------------
+
 class Zurueckfahren : public Cycle_step {
   String get_display_text() { return "ZURUECKFAHREN"; }
 
@@ -1302,13 +1320,14 @@ void setup() {
   main_cycle_steps.push_back(new Aufwecken);
   main_cycle_steps.push_back(new Vorschieben);
   main_cycle_steps.push_back(new Schneiden);
+  main_cycle_steps.push_back(new Stirzel);
   main_cycle_steps.push_back(new Festklemmen);
   main_cycle_steps.push_back(new Startdruck);
   main_cycle_steps.push_back(new Spannen);
   main_cycle_steps.push_back(new Schweissen);
   main_cycle_steps.push_back(new Abkuehlen);
-  main_cycle_steps.push_back(new Entspannen);
   main_cycle_steps.push_back(new Wippenhebel);
+  main_cycle_steps.push_back(new Entspannen);
   main_cycle_steps.push_back(new Zurueckfahren);
   main_cycle_steps.push_back(new Pause);
   //------------------------------------------------

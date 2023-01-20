@@ -154,6 +154,7 @@ void reset_cylinders() {
   zyl_block_klemmrad.set(0);
   zyl_block_messer.set(0);
   zyl_block_foerdermotor.set(0);
+  zyl_startklemme.set(0);
   pneumatic_spring_vent();
 }
 
@@ -1406,23 +1407,27 @@ void monitor_strap_detectors() {
 }
 
 void manage_timeout_actions() {
-  // TIMEOUT 1
-  if (timeout_count == 1) {
-    reset_machine();
-    state_controller.set_reset_mode();
-  }
-  // TIMEOUT 2
-  else if (timeout_count == 2) {
-    reset_machine();
-    state_controller.set_reset_mode();
-  }
-  // STOP
-  else if (timeout_count >= 3) {
-    stop_machine();
-    timeout_count = 0;
-    error_message = "STOPPED";
-    state_controller.set_error_mode();
-  }
+  stop_machine();
+  error_message = "STOPPED";
+  state_controller.set_error_mode();
+
+  // // TIMEOUT 1
+  // if (timeout_count == 1) {
+  //   reset_machine();
+  //   state_controller.set_reset_mode();
+  // }
+  // // TIMEOUT 2
+  // else if (timeout_count == 2) {
+  //   reset_machine();
+  //   state_controller.set_reset_mode();
+  // }
+  // // STOP
+  // else if (timeout_count >= 3) {
+  //   stop_machine();
+  //   timeout_count = 0;
+  //   error_message = "STOPPED";
+  //   state_controller.set_error_mode();
+  // }
 }
 
 void monitor_timeout() {

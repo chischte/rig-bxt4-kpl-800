@@ -1050,16 +1050,17 @@ void read_and_process_pressure() {
 // CREATE CYCLE STEP CLASSES ***************************************************
 // -----------------------------------------------------------------------------
 class Aufwecken : public Cycle_step {
-  String get_display_text() { return "AUFWECKEN"; }
+  String get_display_text() { return "WIPPE ZIEHEN"; }
 
-  void do_initial_stuff(){};
+  void do_initial_stuff() {
+    delay_cycle_step.set_unstarted();
+    zyl_wippenhebel.set(1);
+  };
   void do_loop_stuff() {
-    zyl_wippenhebel.stroke(1500, 1000);
-
-    if (zyl_wippenhebel.stroke_completed()) {
+    if (delay_cycle_step.delay_time_is_up(1000)) {
       set_loop_completed();
     }
-  };
+  }
 };
 // -----------------------------------------------------------------------------
 class Vorschieben : public Cycle_step {
@@ -1075,7 +1076,7 @@ class Vorschieben : public Cycle_step {
   };
   void do_loop_stuff() {
     if (delay_cycle_step.delay_time_is_up(feed_time)) {
-      zyl_wippenhebel.set(0);
+      // zyl_wippenhebel.set(0);
       // zyl_block_klemmrad.set(0);
       zyl_block_foerdermotor.set(0);
       set_loop_completed();
@@ -1106,7 +1107,7 @@ class Stirzel : public Cycle_step {
   };
   void do_loop_stuff() {
     if (delay_cycle_step.delay_time_is_up(500)) {
-    zyl_block_foerdermotor.set(0);
+      zyl_block_foerdermotor.set(0);
       set_loop_completed();
     }
   };
@@ -1117,6 +1118,7 @@ class Festklemmen : public Cycle_step {
 
   void do_initial_stuff() {
     zyl_startklemme.set(1);
+    zyl_wippenhebel.set(0);
     delay_cycle_step.set_unstarted();
   };
   void do_loop_stuff() {
@@ -1133,6 +1135,8 @@ class Startdruck : public Cycle_step {
 
   void do_initial_stuff() {
     delay_cycle_step.set_unstarted();
+    delay_minimum_filltime.set_unstarted();
+    delay_minimum_waittime.set_unstarted();
     is_full_counter = 0;
   };
 
@@ -1186,7 +1190,10 @@ class Spannen : public Cycle_step {
 class Schweissen : public Cycle_step {
   String get_display_text() { return "SCHWEISSEN"; }
 
-  void do_initial_stuff() { zyl_spanntaste.set(0); };
+  void do_initial_stuff() {
+    zyl_spanntaste.set(0);
+    pneumatic_spring_vent();
+  };
 
   void do_loop_stuff() {
     zyl_schweisstaste.stroke(1000, 2000);
@@ -1209,7 +1216,7 @@ class Abkuehlen : public Cycle_step {
   void do_loop_stuff() {
     if (pressure_float < 0.1) // warten bis der Druck abgebaut ist
     {
-      if (delay_cycle_step.delay_time_is_up(4000)) { // Restluft kann entweichen
+      if (delay_cycle_step.delay_time_is_up(6000)) { // Restluft kann entweichen
         set_loop_completed();
       }
     }
@@ -1237,7 +1244,7 @@ class Entspannen : public Cycle_step {
     zyl_startklemme.set(0);
   };
   void do_loop_stuff() {
-    if (delay_cycle_step.delay_time_is_up(500)) {
+    if (delay_cycle_step.delay_time_is_up(2000)) {
       set_loop_completed();
     }
   };
@@ -1248,6 +1255,7 @@ class Zurueckfahren : public Cycle_step {
   String get_display_text() { return "ZURUECKFAHREN"; }
 
   void do_initial_stuff() {
+    zyl_startklemme.set(0);
     pneumatic_spring_move();
     delay_cycle_step.set_unstarted();
   };

@@ -59,16 +59,16 @@ Cylinder zyl_block_messer(CONTROLLINO_D6);
 Cylinder zyl_block_klemmrad(CONTROLLINO_D8);
 Cylinder zyl_block_foerdermotor(CONTROLLINO_R5);
 
-Insomnia spinner_step_timeout(500);
 Insomnia delay_cycle_step;
-Insomnia delay_long_pause;
 Insomnia delay_force_update;
 Insomnia delay_tacho_update;
 Insomnia delay_minimum_filltime;
 Insomnia delay_minimum_waittime;
 
+Insomnia spinner_step_timeout(500);
 Insomnia timeout_machine_stopped(15000);
 Insomnia timeout_reset_button(5000); // pushtime to reset counter
+Insomnia timeout_long_pause;
 
 State_controller state_controller;
 
@@ -114,6 +114,7 @@ void send_to_nextion();
 void clear_text_field(String text_field);
 void clear_info_field();
 void reset_spinner_picture();
+void display_text_in_info_field(String);
 
 // CREATE VECTOR CONTAINER FOR THE CYCLE STEPS OBJECTS *************************
 
@@ -173,6 +174,7 @@ void reset_machine() {
   clear_info_field();
   error_message = "";
   timeout_machine_stopped.reset_time();
+  timeout_long_pause.set_time(0);
 }
 
 void stop_machine() {
@@ -346,6 +348,7 @@ void nex_button_stepback_push_callback(void *ptr) {
   state_controller.set_step_mode();
   state_controller.switch_to_previous_step();
   reset_flag_of_current_step();
+  display_text_in_info_field("");
 }
 void nex_button_stepnxt_push_callback(void *ptr) {
   state_controller.set_machine_stop();
@@ -353,6 +356,7 @@ void nex_button_stepnxt_push_callback(void *ptr) {
   state_controller.set_step_mode();
   state_controller.switch_to_next_step();
   reset_flag_of_current_step();
+  display_text_in_info_field("");
 }
 void nex_button_reset_machine_push_callback(void *ptr) { reset_machine(); }
 
@@ -726,7 +730,7 @@ void show_error() {
 }
 
 void show_remaining_pause_time() {
-  long restpausenzeit = delay_long_pause.get_remaining_delay_time() / 1000;
+  long restpausenzeit = timeout_long_pause.get_remaining_timeout_time() / 1000;
 
   if (nex_state_restpausenzeit != restpausenzeit) {
     if (restpausenzeit > 0 && restpausenzeit < 1000) {
@@ -735,8 +739,6 @@ void show_remaining_pause_time() {
       String displaystring = pause + zeit;
       display_text_in_info_field(displaystring);
       nex_state_restpausenzeit = restpausenzeit;
-    } else {
-      display_text_in_info_field("");
     }
   }
 }
@@ -1289,15 +1291,16 @@ class Pause : public Cycle_step {
     timeout_count = 0;
     error_message = "";
     testZyklenZaehler++;
-    delay_long_pause.set_unstarted();
     abkuehldauer = eeprom_counter.get_value(long_cooldown_time) * 1000;
+    timeout_long_pause.set_time(abkuehldauer);
   };
 
   void do_loop_stuff() {
     if (testZyklenZaehler >= eeprom_counter.get_value(cycles_in_a_row)) {
       timeout_machine_stopped.reset_time(); // Deactivate timeout error during pause.
-      if (delay_long_pause.delay_time_is_up(abkuehldauer)) {
+      if (timeout_long_pause.has_timed_out()) {
         testZyklenZaehler = 0;
+        display_text_in_info_field("");
         set_loop_completed();
       }
     } else {
@@ -1326,9 +1329,9 @@ void setup() {
   // PUSH THE CYCLE STEPS INTO THE VECTOR CONTAINER:
   // PUSH SEQUENCE = CYCLE SEQUENCE !
   main_cycle_steps.push_back(new Aufwecken);
-  main_cycle_steps.push_back(new Vorschieben);
+  main_cycle_steps.push_back(new Vorschieben); //--------------------------
   main_cycle_steps.push_back(new Schneiden);
-  main_cycle_steps.push_back(new Stirzel);
+  main_cycle_steps.push_back(new Stirzel); ///------------------------
   main_cycle_steps.push_back(new Festklemmen);
   main_cycle_steps.push_back(new Startdruck);
   main_cycle_steps.push_back(new Spannen);

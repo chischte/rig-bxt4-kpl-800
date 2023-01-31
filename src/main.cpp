@@ -58,6 +58,8 @@ Cylinder zyl_tool_niederhalter(CONTROLLINO_D9);
 Cylinder zyl_block_messer(CONTROLLINO_D6);
 Cylinder zyl_block_klemmrad(CONTROLLINO_D8);
 Cylinder zyl_block_foerdermotor(CONTROLLINO_R5);
+Cylinder zyl_singal_green(CONTROLLINO_D10);
+Cylinder zyl_singal_red(CONTROLLINO_D11);
 
 Insomnia delay_cycle_step;
 Insomnia delay_force_update;
@@ -1468,6 +1470,9 @@ void loop() {
 
   // MONITOR TIMEOUT:
   monitor_timeout();
+
+  // CONTROL SIGNAL LIGHT:
+  zyl_singal_red.set(state_controller.machine_is_running());
 
   // RUN STEP MODE:
   if (state_controller.is_in_step_mode()) {

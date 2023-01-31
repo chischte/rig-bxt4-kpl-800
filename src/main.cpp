@@ -1183,7 +1183,7 @@ class Spannen : public Cycle_step {
       set_loop_completed();
     };
     if (taster_endposition.get_raw_button_state()) {
-      if (delay_cycle_step.delay_time_is_up(400)) {
+      if (delay_cycle_step.delay_time_is_up(2000)) {
         set_loop_completed();
       }
     };
@@ -1199,7 +1199,7 @@ class Schweissen : public Cycle_step {
   };
 
   void do_loop_stuff() {
-    zyl_schweisstaste.stroke(1000, 2000);
+    zyl_schweisstaste.stroke(2000, 2000);
 
     if (zyl_schweisstaste.stroke_completed()) {
       set_loop_completed();

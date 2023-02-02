@@ -1192,6 +1192,17 @@ class Spannen : public Cycle_step {
   };
 };
 // -----------------------------------------------------------------------------
+class Pause : public Cycle_step {
+  String get_display_text() { return "PAUSE"; }
+
+  void do_initial_stuff() { delay_cycle_step.set_unstarted(); };
+  void do_loop_stuff() {
+    if (delay_cycle_step.delay_time_is_up(1500)) {
+      set_loop_completed();
+    }
+  };
+};
+// -----------------------------------------------------------------------------
 class Schweissen : public Cycle_step {
   String get_display_text() { return "SCHWEISSEN"; }
 
@@ -1284,8 +1295,8 @@ class Zurueckfahren : public Cycle_step {
   };
 };
 // -----------------------------------------------------------------------------
-class Pause : public Cycle_step {
-  String get_display_text() { return "PAUSE"; }
+class Cooldown : public Cycle_step {
+  String get_display_text() { return "ABKUEHLEN"; }
   byte testZyklenZaehler;
   long abkuehldauer;
 
@@ -1337,12 +1348,13 @@ void setup() {
   main_cycle_steps.push_back(new Festklemmen);
   main_cycle_steps.push_back(new Startdruck);
   main_cycle_steps.push_back(new Spannen);
+  main_cycle_steps.push_back(new Pause);
   main_cycle_steps.push_back(new Schweissen);
   main_cycle_steps.push_back(new Abkuehlen);
   main_cycle_steps.push_back(new Wippenhebel);
   main_cycle_steps.push_back(new Entspannen);
   main_cycle_steps.push_back(new Zurueckfahren);
-  main_cycle_steps.push_back(new Pause);
+  main_cycle_steps.push_back(new Cooldown);
   //------------------------------------------------
   // CONFIGURE THE STATE CONTROLLER:
   state_controller.set_no_of_steps(main_cycle_steps.size());

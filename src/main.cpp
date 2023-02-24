@@ -1421,6 +1421,7 @@ void monitor_strap_detectors() {
     state_controller.set_machine_stop();
     state_controller.set_error_mode();
     error_message = "KEIN BAND";
+    zyl_hauptluft.set(0);
   }
 }
 
@@ -1501,7 +1502,7 @@ void loop() {
   else if (state_controller.is_in_reset_mode()) {
     run_reset_mode();
   }
-
+  
   // RUN SPINNER:
   if (state_controller.machine_is_running()) {
     spinner_is_running = true;

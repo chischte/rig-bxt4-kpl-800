@@ -1227,7 +1227,7 @@ class Abkuehlen : public Cycle_step {
 
   void do_initial_stuff() {
     delay_cycle_step.set_unstarted();
-    zyl_block_klemmrad.set(0);
+    zyl_block_klemmrad.set(1);
     pneumatic_spring_vent();
   };
   void do_loop_stuff() {
@@ -1243,7 +1243,9 @@ class Abkuehlen : public Cycle_step {
 class Wippenhebel : public Cycle_step {
   String get_display_text() { return "WIPPENHEBEL"; }
 
-  void do_initial_stuff(){};
+  void do_initial_stuff(){
+    zyl_block_klemmrad.set(1);
+  };
   void do_loop_stuff() {
     zyl_wippenhebel.stroke(1500, 1000);
 

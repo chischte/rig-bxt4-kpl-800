@@ -1136,9 +1136,10 @@ class Festklemmen : public Cycle_step {
 class Startdruck : public Cycle_step {
   String get_display_text() { return "STARTDRUCK"; }
   byte is_full_counter = 0;
-  int minimum_inflation = 20; // [N]
+  int minimum_inflation = 60; // [N]
 
   void do_initial_stuff() {
+    zyl_block_klemmrad.set(0);
     delay_cycle_step.set_unstarted();
     delay_minimum_filltime.set_unstarted();
     delay_minimum_waittime.set_unstarted();
@@ -1149,7 +1150,7 @@ class Startdruck : public Cycle_step {
 
     // Build pressure after minmum wait time
     if (force_int + minimum_inflation <= eeprom_counter.get_value(startfuelldruck)) {
-      if (delay_minimum_waittime.delay_time_is_up(500)) {
+      if (delay_minimum_waittime.delay_time_is_up(250)) {
         pneumatic_spring_build_pressure();
         delay_minimum_filltime.reset_time();
         is_full_counter = 0;
@@ -1157,7 +1158,7 @@ class Startdruck : public Cycle_step {
     }
     // Stop building pressure after minmum filltime
     else {
-      if (delay_minimum_filltime.delay_time_is_up(100)) {
+      if (delay_minimum_filltime.delay_time_is_up(90)) {
         pneumatic_spring_block();
         delay_minimum_waittime.reset_time();
         is_full_counter++;
@@ -1243,9 +1244,7 @@ class Abkuehlen : public Cycle_step {
 class Wippenhebel : public Cycle_step {
   String get_display_text() { return "WIPPENHEBEL"; }
 
-  void do_initial_stuff(){
-    zyl_block_klemmrad.set(1);
-  };
+  void do_initial_stuff() { zyl_block_klemmrad.set(1); };
   void do_loop_stuff() {
     zyl_wippenhebel.stroke(1500, 1000);
 
@@ -1504,7 +1503,7 @@ void loop() {
   else if (state_controller.is_in_reset_mode()) {
     run_reset_mode();
   }
-  
+
   // RUN SPINNER:
   if (state_controller.machine_is_running()) {
     spinner_is_running = true;

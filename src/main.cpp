@@ -1062,7 +1062,7 @@ class Aufwecken : public Cycle_step {
     zyl_wippenhebel.set(1);
   };
   void do_loop_stuff() {
-    if (delay_cycle_step.delay_time_is_up(1000)) {
+    if (delay_cycle_step.delay_time_is_up(1300)) {
       set_loop_completed();
     }
   }

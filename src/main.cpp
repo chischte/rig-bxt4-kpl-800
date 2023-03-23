@@ -444,9 +444,9 @@ void nex_button_1_left_push_callback(void *ptr) { decrease_slider_value(cycles_i
 
 void nex_button_1_right_push_callback(void *ptr) { increase_slider_value(cycles_in_a_row, 10, 1); }
 
-void nex_button_2_left_push_callback(void *ptr) { decrease_slider_value(long_cooldown_time, 0, 10); }
+void nex_button_2_left_push_callback(void *ptr) { decrease_slider_value(long_cooldown_time, 0, 5); }
 
-void nex_button_2_right_push_callback(void *ptr) { increase_slider_value(long_cooldown_time, 600, 10); }
+void nex_button_2_right_push_callback(void *ptr) { increase_slider_value(long_cooldown_time, 600, 5); }
 
 void nex_button_3_left_push_callback(void *ptr) { decrease_slider_value(strap_eject_feed_time, 0, 100); }
 
@@ -1094,7 +1094,7 @@ class Schneiden : public Cycle_step {
 
   void do_initial_stuff(){};
   void do_loop_stuff() {
-    zyl_block_messer.stroke(1500, 500);
+    zyl_block_messer.stroke(1300, 500);
 
     if (zyl_block_messer.stroke_completed()) {
       set_loop_completed();
@@ -1165,7 +1165,7 @@ class Startdruck : public Cycle_step {
       }
     }
 
-    if (is_full_counter >= 20) {
+    if (is_full_counter >= 14) {
       pneumatic_spring_block();
       set_loop_completed();
     };
@@ -1186,7 +1186,7 @@ class Spannen : public Cycle_step {
       set_loop_completed();
     };
     if (taster_endposition.get_raw_button_state()) {
-      if (delay_cycle_step.delay_time_is_up(50)) {
+      if (delay_cycle_step.delay_time_is_up(100)) {
         zyl_spanntaste.set(0);
         set_loop_completed();
       }
@@ -1199,7 +1199,7 @@ class Pause : public Cycle_step {
 
   void do_initial_stuff() { delay_cycle_step.set_unstarted(); };
   void do_loop_stuff() {
-    if (delay_cycle_step.delay_time_is_up(1000)) {
+    if (delay_cycle_step.delay_time_is_up(800)) {
       set_loop_completed();
     }
   };
@@ -1214,7 +1214,7 @@ class Schweissen : public Cycle_step {
   };
 
   void do_loop_stuff() {
-    zyl_schweisstaste.stroke(800, 2500);
+    zyl_schweisstaste.stroke(800, 5500); // SCHWEISSSTART BIS ABKUEHLEN MAX. CA. 4s
 
     if (zyl_schweisstaste.stroke_completed()) {
       set_loop_completed();
@@ -1234,7 +1234,7 @@ class Abkuehlen : public Cycle_step {
   void do_loop_stuff() {
     if (pressure_float < 0.1) // warten bis der Druck abgebaut ist
     {
-      if (delay_cycle_step.delay_time_is_up(6000)) { // Restluft kann entweichen
+      if (delay_cycle_step.delay_time_is_up(500)) { // Restluft kann entweichen
         set_loop_completed();
       }
     }
@@ -1246,7 +1246,7 @@ class Wippenhebel : public Cycle_step {
 
   void do_initial_stuff() { zyl_block_klemmrad.set(1); };
   void do_loop_stuff() {
-    zyl_wippenhebel.stroke(1500, 1000);
+    zyl_wippenhebel.stroke(1300, 50);
 
     if (zyl_wippenhebel.stroke_completed()) {
       set_loop_completed();
@@ -1262,7 +1262,7 @@ class Entspannen : public Cycle_step {
     zyl_startklemme.set(0);
   };
   void do_loop_stuff() {
-    if (delay_cycle_step.delay_time_is_up(2000)) {
+    if (delay_cycle_step.delay_time_is_up(1000)) {
       set_loop_completed();
     }
   };
@@ -1287,7 +1287,7 @@ class Zurueckfahren : public Cycle_step {
       pneumatic_spring_vent();
       if (pressure_float < 0.1) // warten bis der Druck abgebaut ist
       {
-        if (delay_cycle_step.delay_time_is_up(500)) {
+        if (delay_cycle_step.delay_time_is_up(50)) {
           eeprom_counter.count_one_up(shorttime_counter);
           eeprom_counter.count_one_up(longtime_counter);
           set_loop_completed();

@@ -1422,6 +1422,13 @@ void monitor_strap_detectors() {
     state_controller.set_machine_stop();
     state_controller.set_error_mode();
     error_message = "KEIN BAND";
+    zyl_wippenhebel.set(0);
+    zyl_spanntaste.set(0);
+    zyl_schweisstaste.set(0);
+    zyl_block_klemmrad.set(0);
+    zyl_block_messer.set(0);
+    zyl_block_foerdermotor.set(0);
+    zyl_startklemme.set(0);
     zyl_hauptluft.set(0);
   }
 }

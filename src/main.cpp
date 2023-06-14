@@ -1368,6 +1368,8 @@ void setup() {
 
   zyl_tool_niederhalter.set(1);
 
+  reset_flag_of_current_step();
+
   Serial.println("EXIT SETUP");
 }
 

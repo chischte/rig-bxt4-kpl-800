@@ -12,7 +12,6 @@
  * *****************************************************************************
  */
 
-
 #include <ArduinoSTL.h> //       https://github.com/mike-matera/ArduinoSTL
 #include <Controllino.h> //      PIO Controllino Library
 #include <Cylinder.h> //         https://github.com/chischte/cylinder-library
@@ -1332,6 +1331,8 @@ class Cooldown : public Cycle_step {
 
 void setup() {
   eeprom_counter.setup(eeprom_min_address, eeprom_max_address, number_of_eeprom_values);
+
+  // eeprom_counter.set_value(longtime_counter, 2510);
 
   Serial.begin(115200);
 

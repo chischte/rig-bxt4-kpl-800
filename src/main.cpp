@@ -1186,7 +1186,7 @@ class Spannen : public Cycle_step {
       set_loop_completed();
     };
     if (taster_endposition.get_raw_button_state()) {
-      if (delay_cycle_step.delay_time_is_up(100)) {
+      if (delay_cycle_step.delay_time_is_up(200)) {
         zyl_spanntaste.set(0);
         set_loop_completed();
       }
@@ -1214,7 +1214,7 @@ class Schweissen : public Cycle_step {
   };
 
   void do_loop_stuff() {
-    zyl_schweisstaste.stroke(800, 5500); // SCHWEISSSTART BIS ABKUEHLEN MAX. CA. 4s
+    zyl_schweisstaste.stroke(800, 7000); // SCHWEISSSTART BIS ABKUEHLEN MAX. CA. 4s
 
     if (zyl_schweisstaste.stroke_completed()) {
       set_loop_completed();
